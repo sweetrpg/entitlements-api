@@ -14,7 +14,7 @@ value for a subject. Platform-wide design is in `sweetrpg/platform`'s PADR-0034
 | Route | Auth | Purpose |
 | --- | --- | --- |
 | `GET /check?key=` | user token | The caller's effective value for one key |
-| `POST /check/batch` | user token | `{keys[]}` or `{prefix}` |
+| `GET /check/batch` | user token | Repeated `?key=a.b&key=a.c`, or `?prefix=initiative.` (exactly one of the two) |
 | `POST /billing/checkout` | user token | `{tier_id}` returns `{url}`, a Stripe Checkout page for the caller |
 | `POST /billing/portal` | user token | `{url}` for the Stripe billing portal; 404 if the caller never checked out |
 | `POST /webhooks/stripe` | Stripe signature | Public. Verified against the raw body; no user token |
@@ -23,7 +23,7 @@ value for a subject. Platform-wide design is in `sweetrpg/platform`'s PADR-0034
 
 Check responses: `{key, type, value, ttl_seconds}` plus `Cache-Control: private, max-age=<ttl>`.
 `value` is a boolean for flags and an integer for limits. An unknown key returns 404 and fails a
-whole batch. Usage against a limit is the caller's to count.
+whole batch. A batch with both or neither of `key`/`prefix` returns 400 `invalid_selector`; more than 200 keys returns `too_many_keys`; a prefix over 128 characters returns `prefix_too_long`. Usage against a limit is the caller's to count.
 
 ## Auth
 

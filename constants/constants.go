@@ -46,6 +46,9 @@ const (
 	// MaxBatchKeys caps how many keys one batch check may name or expand to.
 	MaxBatchKeys = 200
 
+	// MaxPrefixLength caps a batch check's prefix; a key name is at most 128 characters.
+	MaxPrefixLength = 128
+
 	// MaxTTLSeconds caps a key's cache TTL hint.
 	MaxTTLSeconds = 86400
 

@@ -8,11 +8,13 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	apiv "github.com/sweetrpg/api-core.go/vo"
 	"github.com/sweetrpg/authz-client.go/authz"
 	"github.com/sweetrpg/common.go/logging"
 	"github.com/sweetrpg/entitlements-api/billing"
 	"github.com/sweetrpg/entitlements-api/catalog"
 	"github.com/sweetrpg/entitlements-api/config"
+	"github.com/sweetrpg/entitlements-api/constants"
 	"github.com/sweetrpg/entitlements-api/data"
 	"github.com/sweetrpg/entitlements-api/models"
 )
@@ -160,7 +162,7 @@ func TestChecksRequireAVerifiedUserToken(t *testing.T) {
 	path := "/check?key=initiative.theme_slots"
 	mustCode(t, do(r, "GET", path, "", ""), http.StatusUnauthorized)
 	mustCode(t, do(r, "GET", path, "forged-token", ""), http.StatusUnauthorized)
-	mustCode(t, do(r, "POST", "/check/batch", "", `{"keys":["initiative.deluxe"]}`), http.StatusUnauthorized)
+	mustCode(t, do(r, "GET", "/check/batch?key=initiative.deluxe", "", ""), http.StatusUnauthorized)
 	mustCode(t, do(r, "GET", path, userTok, ""), http.StatusOK)
 }
 
@@ -202,7 +204,7 @@ func TestBatchCheck(t *testing.T) {
 	r, st := seedChecks(t)
 	st.AddGrant(models.Grant{UserID: "canonical-" + userTok, Key: "initiative.theme_slots", Value: 12, Status: models.GrantActive})
 
-	rec := do(r, "POST", "/check/batch", userTok, `{"prefix":"initiative."}`)
+	rec := do(r, "GET", "/check/batch?prefix=initiative.", userTok, "")
 	mustCode(t, rec, http.StatusOK)
 	var out BatchCheckVO
 	_ = json.Unmarshal(rec.Body.Bytes(), &out)
@@ -210,17 +212,46 @@ func TestBatchCheck(t *testing.T) {
 		t.Errorf("out = %+v", out)
 	}
 
-	mustCode(t, do(r, "POST", "/check/batch", userTok, `{"keys":["initiative.deluxe"]}`), http.StatusOK)
+	rec = do(r, "GET", "/check/batch?key=initiative.deluxe&key=initiative.theme_slots", userTok, "")
+	mustCode(t, rec, http.StatusOK)
+	out = BatchCheckVO{}
+	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	if len(out.Results) != 2 {
+		t.Errorf("results = %+v", out.Results)
+	}
 }
 
-func TestBatchCheckErrors(t *testing.T) {
+func TestBatchCheckPostIsRemoved(t *testing.T) {
 	r, _ := seedChecks(t)
-	mustCode(t, do(r, "POST", "/check/batch", userTok, `{not json`), http.StatusBadRequest)
-	mustCode(t, do(r, "POST", "/check/batch", userTok, `{}`), http.StatusBadRequest)
-	mustCode(t, do(r, "POST", "/check/batch", userTok, `{"keys":["a.b"],"prefix":"a."}`), http.StatusBadRequest)
-	mustCode(t, do(r, "POST", "/check/batch", userTok, `{"keys":["initiative.nope"]}`), http.StatusNotFound)
-	keys := strings.Repeat(`"a.b",`, 201)
-	mustCode(t, do(r, "POST", "/check/batch", userTok, `{"keys":[`+keys[:len(keys)-1]+`]}`), http.StatusBadRequest)
+	mustCode(t, do(r, "POST", "/check/batch", userTok, `{"keys":["initiative.deluxe"]}`), http.StatusNotFound)
+}
+
+func TestBatchCheckBadSelectorsAreTyped(t *testing.T) {
+	r, _ := seedChecks(t)
+	tooMany := "/check/batch?key=a.b" + strings.Repeat("&key=a.b", constants.MaxBatchKeys)
+	longPrefix := "/check/batch?prefix=" + strings.Repeat("a", constants.MaxPrefixLength+1)
+	cases := map[string]struct{ path, code string }{
+		"neither":     {"/check/batch", "invalid_selector"},
+		"both":        {"/check/batch?key=a.b&prefix=a.", "invalid_selector"},
+		"too many":    {tooMany, "too_many_keys"},
+		"long prefix": {longPrefix, "prefix_too_long"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			rec := do(r, "GET", c.path, userTok, "")
+			mustCode(t, rec, http.StatusBadRequest)
+			var e apiv.ErrorVO
+			_ = json.Unmarshal(rec.Body.Bytes(), &e)
+			if e.Error != c.code {
+				t.Errorf("error = %q, want %q", e.Error, c.code)
+			}
+		})
+	}
+}
+
+func TestBatchCheckUnknownKeyFailsWholeBatch(t *testing.T) {
+	r, _ := seedChecks(t)
+	mustCode(t, do(r, "GET", "/check/batch?key=initiative.deluxe&key=initiative.nope", userTok, ""), http.StatusNotFound)
 }
 
 func TestPing(t *testing.T) {
