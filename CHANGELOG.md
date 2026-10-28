@@ -1,3 +1,12 @@
+## [0.2.1] - 2026-10-28
+
+### 🐛 Bug Fixes
+
+- *(checks)* Make batch check a GET with query parameters
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Merge master into develop after v0.2.0
 ## [0.2.0] - 2026-10-28
 
 ### 🚀 Features
