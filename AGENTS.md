@@ -50,10 +50,9 @@ go test -race ./...
 
 ## Service Notes
 
-- **Service credentials (follow-up):** `/check` callers authenticate with a bearer token listed
-  in `SERVICE_TOKENS` (`name=token,...`). The platform has no service-credential standard yet;
-  this env registry is the interim mechanism, with the value supplied by an ExternalSecret. Revisit
-  when a platform-wide service identity exists.
+- **Auth:** zero trust. Checks require the end user's bearer token, verified through auth-api
+  (Auth0) with the canonical user ID resolved via users-api. No service tokens, and no user ID
+  taken from the request.
 - **Audit:** catalog writes and their audit entry are not one transaction. A failed audit append
   is logged at ERROR and the write still succeeds.
 - **Delete strategy:** catalog keys and tiers are soft-deleted; the audit collection is
