@@ -1,0 +1,1 @@
+{"id":"evt_pref","object":"event","type":"charge.refunded","data":{"object":{"id":"ch_b1","object":"charge","payment_intent":"pi_b1","refunded":true}}}

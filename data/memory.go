@@ -17,6 +17,7 @@ type MemoryStore struct {
 	mu      sync.Mutex
 	keys    []*models.Key
 	tiers   []*models.Tier
+	prods   []*models.Product
 	grants  []models.Grant
 	audit   []models.AuditEntry
 	custs   map[string]string
@@ -179,6 +180,78 @@ func (m *MemoryStore) DeleteTier(_ context.Context, slug, actor string) error {
 	return nil
 }
 
+func (m *MemoryStore) findProduct(slug string) *models.Product {
+	for _, p := range m.prods {
+		if p.Slug == slug && live(p.Auditable) {
+			return p
+		}
+	}
+	return nil
+}
+
+func (m *MemoryStore) InsertProduct(_ context.Context, p *models.Product, actor string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.findProduct(p.Slug) != nil {
+		return ErrDuplicate
+	}
+	mcore.StampCreate(&p.Auditable, actor, m.now().UTC())
+	c := *p
+	m.prods = append(m.prods, &c)
+	return nil
+}
+
+func (m *MemoryStore) GetProducts(_ context.Context, slugs []string) ([]models.Product, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []models.Product
+	for _, p := range m.prods {
+		if live(p.Auditable) && slices.Contains(slugs, p.Slug) {
+			out = append(out, *p)
+		}
+	}
+	return out, nil
+}
+
+func (m *MemoryStore) ListProducts(_ context.Context, limit, skip int64) ([]models.Product, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []models.Product
+	for _, p := range m.prods {
+		if live(p.Auditable) {
+			out = append(out, *p)
+		}
+	}
+	slices.SortFunc(out, func(a, b models.Product) int { return strings.Compare(a.Slug, b.Slug) })
+	return window(out, limit, skip), nil
+}
+
+func (m *MemoryStore) UpdateProduct(_ context.Context, in *models.Product, actor string) (*models.Product, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	p := m.findProduct(in.Slug)
+	if p == nil {
+		return nil, ErrNotFound
+	}
+	p.Name, p.Description, p.Billing, p.Repeatable = in.Name, in.Description, in.Billing, in.Repeatable
+	p.StripePriceID, p.Entitlements = in.StripePriceID, in.Entitlements
+	mcore.StampUpdate(&p.Auditable, actor, m.now().UTC())
+	c := *p
+	return &c, nil
+}
+
+func (m *MemoryStore) DeleteProduct(_ context.Context, slug, actor string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	p := m.findProduct(slug)
+	if p == nil {
+		return ErrNotFound
+	}
+	now := m.now().UTC()
+	p.DeletedAt, p.DeletedBy = &now, &actor
+	return nil
+}
+
 func (m *MemoryStore) DefaultTierID(context.Context) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -204,16 +277,16 @@ func (m *MemoryStore) ActiveGrants(_ context.Context, userID string, now time.Ti
 	return out, nil
 }
 
-func (m *MemoryStore) GrantByExternal(_ context.Context, source, externalID string) (*models.Grant, error) {
+func (m *MemoryStore) GrantsByExternal(_ context.Context, source, externalID string) ([]models.Grant, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	var out []models.Grant
 	for _, g := range m.grants {
 		if g.Source == source && g.ExternalID == externalID {
-			c := g
-			return &c, nil
+			out = append(out, g)
 		}
 	}
-	return nil, ErrNotFound
+	return out, nil
 }
 
 func (m *MemoryStore) GrantsByRef(_ context.Context, ref string) ([]models.Grant, error) {
@@ -232,7 +305,7 @@ func (m *MemoryStore) InsertGrant(_ context.Context, g *models.Grant, actor stri
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, e := range m.grants {
-		if g.ExternalID != "" && e.Source == g.Source && e.ExternalID == g.ExternalID {
+		if g.ExternalID != "" && e.Source == g.Source && e.ExternalID == g.ExternalID && e.Key == g.Key {
 			return ErrDuplicate
 		}
 	}
@@ -245,7 +318,7 @@ func (m *MemoryStore) UpdateGrant(_ context.Context, g *models.Grant, actor stri
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for i, e := range m.grants {
-		if e.Source == g.Source && e.ExternalID == g.ExternalID {
+		if e.Source == g.Source && e.ExternalID == g.ExternalID && e.Key == g.Key {
 			mcore.StampUpdate(&g.Auditable, actor, m.now().UTC())
 			m.grants[i] = *g
 			return nil

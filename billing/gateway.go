@@ -5,6 +5,7 @@ package billing
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/stripe/stripe-go/v87"
 )
@@ -14,6 +15,8 @@ type CheckoutParams struct {
 	PriceID    string
 	UserID     string
 	TierID     string
+	ProductID  string
+	Quantity   int64  // units of the price; 0 means 1
 	Email      string // optional; Checkout asks for one when empty
 	CustomerID string // optional; reuses the user's existing Stripe customer
 	SuccessURL string
@@ -44,13 +47,20 @@ func (g *StripeGateway) CreateCheckout(ctx context.Context, p CheckoutParams) (s
 	if err != nil {
 		return "", fmt.Errorf("retrieve price: %w", err)
 	}
-	meta := map[string]string{"user_id": p.UserID, "tier_id": p.TierID}
+	qty := max(p.Quantity, 1)
+	meta := map[string]string{"user_id": p.UserID}
+	if p.ProductID != "" {
+		meta["product_id"] = p.ProductID
+		meta["quantity"] = strconv.FormatInt(qty, 10)
+	} else {
+		meta["tier_id"] = p.TierID
+	}
 	params := &stripe.CheckoutSessionCreateParams{
 		SuccessURL:        stripe.String(p.SuccessURL),
 		CancelURL:         stripe.String(p.CancelURL),
 		ClientReferenceID: stripe.String(p.UserID),
 		Metadata:          meta,
-		LineItems:         []*stripe.CheckoutSessionCreateLineItemParams{{Price: stripe.String(p.PriceID), Quantity: stripe.Int64(1)}},
+		LineItems:         []*stripe.CheckoutSessionCreateLineItemParams{{Price: stripe.String(p.PriceID), Quantity: stripe.Int64(qty)}},
 	}
 	if price.Type == stripe.PriceTypeRecurring {
 		params.Mode = stripe.String(string(stripe.CheckoutSessionModeSubscription))

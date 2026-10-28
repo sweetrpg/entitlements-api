@@ -91,6 +91,10 @@ type Grant struct {
 	Value      int64              `bson:"value,omitempty"`
 	Source     string             `bson:"source"`
 	ExternalID string             `bson:"external_id,omitempty"`
+	// ProductID and Quantity record which product purchase a key-level grant came from. All the
+	// grants of one purchase share ExternalID and are ended or revoked together.
+	ProductID string `bson:"product_id,omitempty"`
+	Quantity  int64  `bson:"quantity,omitempty"`
 	// Refs are other Stripe object IDs (invoice, payment intent, charge) a refund or dispute
 	// event can name instead of ExternalID.
 	Refs            []string   `bson:"refs,omitempty"`
@@ -103,6 +107,35 @@ type Grant struct {
 // the same rule.
 func (g Grant) ActiveAt(now time.Time) bool {
 	return g.Status == GrantActive && (g.ValidUntil == nil || g.ValidUntil.After(now))
+}
+
+// Billing kinds for a product.
+const (
+	BillingOneOff    = "one_off"
+	BillingRecurring = "recurring"
+)
+
+// ProductEntitlement is one key and value a product grants per unit purchased. Type is copied
+// from the key at write time (key types never change).
+type ProductEntitlement struct {
+	Key   string  `bson:"key"`
+	Type  KeyType `bson:"type"`
+	Value int64   `bson:"value"`
+}
+
+// Product is what a user buys: one Stripe price that grants one or more entitlements. A product
+// with more than one entitlement is a bundle. Repeatable means it can be bought with a quantity
+// (recurring) or more than once (one-off); otherwise a user holds at most one.
+type Product struct {
+	ID              primitive.ObjectID   `bson:"_id,omitempty" json:"-"`
+	Slug            string               `bson:"slug" json:"id"`
+	Name            string               `bson:"name" json:"name"`
+	Description     string               `bson:"description" json:"description"`
+	Billing         string               `bson:"billing" json:"billing"`
+	Repeatable      bool                 `bson:"repeatable" json:"repeatable"`
+	StripePriceID   string               `bson:"stripe_price_id,omitempty" json:"stripe_price_id,omitempty"`
+	Entitlements    []ProductEntitlement `bson:"entitlements" json:"-"`
+	mcore.Auditable `bson:",inline"`
 }
 
 // StripeCustomer maps a user to their Stripe customer so the billing portal can be opened.
@@ -139,6 +172,9 @@ func ValidateTierSlug(slug string) error {
 	}
 	return nil
 }
+
+// ValidateProductSlug checks a product identifier; products share the tier id format.
+func ValidateProductSlug(slug string) error { return ValidateTierSlug(slug) }
 
 // ValidateMax checks a key's maximum: only limit keys carry one, and it must be a positive
 // integer that fits a limit value.

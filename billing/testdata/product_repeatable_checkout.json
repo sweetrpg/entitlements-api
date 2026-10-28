@@ -1,0 +1,1 @@
+{"id":"evt_pco_slot","object":"event","type":"checkout.session.completed","data":{"object":{"id":"cs_s1","object":"checkout.session","mode":"payment","payment_status":"paid","payment_intent":"pi_s1","client_reference_id":"user-3","metadata":{"user_id":"user-3","product_id":"theme-slot","quantity":"3"}}}}

@@ -106,10 +106,11 @@ func main() {
 	r.Use(ratelimit.Middleware(redisPool, ratelimit.DefaultOptions()))
 
 	authzClient := authz.NewClient(cfg.AuthAPIURL, cfg.UsersAPIURL)
-	bill := billing.New(store, billing.NewStripeGateway(cfg.StripeSecretKey), billing.URLs{
+	catalogSvc := catalog.New(store)
+	bill := billing.New(store, billing.NewStripeGateway(cfg.StripeSecretKey), catalogSvc, billing.URLs{
 		CheckoutSuccess: cfg.CheckoutSuccessURL, CheckoutCancel: cfg.CheckoutCancelURL, PortalReturn: cfg.PortalReturnURL,
 	})
-	server.SetupHandlers(r, catalog.New(store), bill, authzClient, cfg)
+	server.SetupHandlers(r, catalogSvc, bill, authzClient, cfg)
 
 	_ = r.Run(util.GetEnv(apiconstants.BIND_ADDRESS, ":8000"))
 }

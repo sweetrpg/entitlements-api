@@ -22,7 +22,7 @@ import (
 type fakeStripe struct{}
 
 func (fakeStripe) CreateCheckout(_ context.Context, p billing.CheckoutParams) (string, error) {
-	return "https://checkout.example/" + p.UserID + "/" + p.TierID + "?email=" + p.Email, nil
+	return "https://checkout.example/" + p.UserID + "/" + p.TierID + p.ProductID + "?email=" + p.Email, nil
 }
 
 func (fakeStripe) CreatePortal(_ context.Context, customerID, _ string) (string, error) {
@@ -66,7 +66,7 @@ func TestWebhookRejectsBadSignaturesAndChangesNothing(t *testing.T) {
 			mustCode(t, postWebhook(r, payload, header), http.StatusBadRequest)
 		})
 	}
-	if _, err := st.GrantByExternal(context.Background(), models.SourceStripePurchase, "pi_1"); err == nil {
+	if gs, _ := st.GrantsByExternal(context.Background(), models.SourceStripePurchase, "pi_1"); len(gs) != 0 {
 		t.Error("a grant was created from an unverified request")
 	}
 }
@@ -75,9 +75,9 @@ func TestWebhookAcceptsSignedEventAndCreatesGrant(t *testing.T) {
 	r, st := newRouter(t)
 	payload := fixture(t, "checkout_payment.json")
 	mustCode(t, postWebhook(r, payload, signed(payload, webhookSecret)), http.StatusOK)
-	g, err := st.GrantByExternal(context.Background(), models.SourceStripePurchase, "pi_1")
-	if err != nil || g.UserID != "user-1" {
-		t.Fatalf("grant = %+v err = %v", g, err)
+	gs, err := st.GrantsByExternal(context.Background(), models.SourceStripePurchase, "pi_1")
+	if err != nil || len(gs) != 1 || gs[0].UserID != "user-1" {
+		t.Fatalf("grants = %+v err = %v", gs, err)
 	}
 }
 
@@ -183,4 +183,64 @@ func TestAdminCanSetAndClearAKeyMaximum(t *testing.T) {
 	if k.Max != nil {
 		t.Errorf("max after clearing = %v", *k.Max)
 	}
+}
+
+func adminProduct(t *testing.T, r http.Handler, body string) {
+	t.Helper()
+	mustCode(t, do(r, "POST", "/admin/products", adminTok, body), http.StatusCreated)
+}
+
+func TestAdminProductEndpoints(t *testing.T) {
+	r, _ := newRouter(t)
+	mustCode(t, do(r, "POST", "/admin/keys", adminTok, `{"key":"a.slots","type":"limit"}`), http.StatusCreated)
+	mustCode(t, do(r, "POST", "/admin/keys", adminTok, `{"key":"a.pro","type":"flag"}`), http.StatusCreated)
+
+	body := `{"id":"pack","name":"Pack","billing":"one_off","stripe_price_id":"price_1","entitlements":{"a.slots":2,"a.pro":true}}`
+	mustCode(t, do(r, "POST", "/admin/products", "", body), http.StatusUnauthorized)
+	mustCode(t, do(r, "POST", "/admin/products", userTok, body), http.StatusForbidden)
+	rec := do(r, "POST", "/admin/products", adminTok, body)
+	mustCode(t, rec, http.StatusCreated)
+	var vo ProductVO
+	_ = json.Unmarshal(rec.Body.Bytes(), &vo)
+	if vo.ID != "pack" || vo.Entitlements["a.slots"] != float64(2) || vo.Entitlements["a.pro"] != true {
+		t.Errorf("vo = %+v", vo)
+	}
+	mustCode(t, do(r, "POST", "/admin/products", adminTok, body), http.StatusConflict)
+	mustCode(t, do(r, "POST", "/admin/products", adminTok, `{"id":"bad","name":"B","billing":"one_off","entitlements":{"no.such":1}}`), http.StatusBadRequest)
+	mustCode(t, do(r, "POST", "/admin/products", adminTok, `{not json`), http.StatusBadRequest)
+
+	mustCode(t, do(r, "PUT", "/admin/products/pack", adminTok, `{"name":"Pack 2","billing":"recurring","repeatable":true,"entitlements":{"a.slots":4}}`), http.StatusOK)
+	mustCode(t, do(r, "PUT", "/admin/products/ghost", adminTok, `{"name":"G","billing":"one_off","entitlements":{"a.slots":1}}`), http.StatusNotFound)
+	mustCode(t, do(r, "PUT", "/admin/products/pack", adminTok, `{not json`), http.StatusBadRequest)
+
+	rec = do(r, "GET", "/admin/products", adminTok, "")
+	mustCode(t, rec, http.StatusOK)
+	var list []ProductVO
+	_ = json.Unmarshal(rec.Body.Bytes(), &list)
+	if len(list) != 1 || list[0].Name != "Pack 2" || !list[0].Repeatable {
+		t.Errorf("list = %+v", list)
+	}
+	mustCode(t, do(r, "DELETE", "/admin/products/pack", adminTok, ""), http.StatusNoContent)
+	mustCode(t, do(r, "DELETE", "/admin/products/pack", adminTok, ""), http.StatusNotFound)
+}
+
+func TestProductCheckoutOverHTTPAndMaximumRefusal(t *testing.T) {
+	r, _ := newRouter(t)
+	mustCode(t, do(r, "POST", "/admin/keys", adminTok, `{"key":"a.slots","type":"limit","max":5}`), http.StatusCreated)
+	adminProduct(t, r, `{"id":"slot","name":"Slot","billing":"one_off","repeatable":true,"stripe_price_id":"price_s","entitlements":{"a.slots":2}}`)
+
+	rec := do(r, "POST", "/billing/checkout", userTok, `{"product_id":"slot","quantity":2}`)
+	mustCode(t, rec, http.StatusOK)
+	if !strings.Contains(rec.Body.String(), "/slot") {
+		t.Errorf("body = %s", rec.Body)
+	}
+
+	rec = do(r, "POST", "/billing/checkout", userTok, `{"product_id":"slot","quantity":3}`)
+	mustCode(t, rec, http.StatusConflict)
+	var vo MaxExceededVO
+	_ = json.Unmarshal(rec.Body.Bytes(), &vo)
+	if vo.Error != "exceeds_maximum" || vo.UnitsRemaining != 5 || vo.Key != "a.slots" {
+		t.Errorf("body = %+v", vo)
+	}
+	mustCode(t, do(r, "POST", "/billing/checkout", userTok, `{"product_id":"slot","tier_id":"x"}`), http.StatusBadRequest)
 }

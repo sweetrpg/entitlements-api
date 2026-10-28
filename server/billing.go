@@ -23,7 +23,9 @@ type SessionVO struct {
 }
 
 type checkoutBody struct {
-	TierID string `json:"tier_id"`
+	TierID    string `json:"tier_id"`
+	ProductID string `json:"product_id"`
+	Quantity  int64  `json:"quantity"`
 }
 
 // setupBillingHandlers registers the user-facing billing routes. Like checks, they authenticate
@@ -33,11 +35,12 @@ func setupBillingHandlers(g *gin.Engine, svc *billing.Service, client *authz.Cli
 
 	s.POST("/checkout", func(c *gin.Context) {
 		var b checkoutBody
-		if c.ShouldBindJSON(&b) != nil || b.TierID == "" {
-			badRequest(c, "tier_id is required")
+		if c.ShouldBindJSON(&b) != nil {
+			badRequest(c, "malformed JSON body")
 			return
 		}
-		url, err := svc.Checkout(c.Request.Context(), authz.Viewer(c), tokenEmail(authz.Token(c)), b.TierID)
+		url, err := svc.Checkout(c.Request.Context(), authz.Viewer(c), tokenEmail(authz.Token(c)),
+			billing.CheckoutRequest{TierID: b.TierID, ProductID: b.ProductID, Quantity: b.Quantity})
 		if err != nil {
 			writeError(c, err)
 			return

@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/sweetrpg/common.go/logging"
-	"github.com/sweetrpg/entitlements-api/data"
+	"github.com/sweetrpg/entitlements-api/catalog"
 	"github.com/sweetrpg/entitlements-api/models"
 )
 
@@ -52,6 +53,19 @@ func (s *Service) handlers() map[string]handlerFunc {
 	}
 }
 
+// purchase is what a Stripe event says a user bought: one Stripe object (the subscription or the
+// payment intent) that becomes one grant per entitlement of a product, or one tier grant.
+type purchase struct {
+	source     string
+	externalID string
+	userID     string
+	tierID     string
+	productID  string
+	quantity   int64
+	validUntil *time.Time
+	refs       []string
+}
+
 func (s *Service) onCheckout(ctx context.Context, raw json.RawMessage) error {
 	var cs checkoutSession
 	if err := json.Unmarshal(raw, &cs); err != nil {
@@ -73,19 +87,23 @@ func (s *Service) onCheckout(ctx context.Context, raw json.RawMessage) error {
 			return err
 		}
 	}
-	g := models.Grant{UserID: user, TierID: cs.Metadata["tier_id"], Refs: []string{cs.ID}}
+	qty, _ := strconv.ParseInt(cs.Metadata["quantity"], 10, 64)
+	p := purchase{
+		userID: user, tierID: cs.Metadata["tier_id"], productID: cs.Metadata["product_id"],
+		quantity: max(qty, 1), refs: nonEmpty(cs.ID),
+	}
 	switch cs.Mode {
 	case "subscription":
-		g.Source, g.ExternalID = models.SourceStripeSubscription, cs.Subscription
+		p.source, p.externalID = models.SourceStripeSubscription, cs.Subscription
 	case "payment":
-		g.Source, g.ExternalID = models.SourceStripePurchase, cs.PaymentIntent
+		p.source, p.externalID = models.SourceStripePurchase, cs.PaymentIntent
 	default:
 		return nil
 	}
-	if g.ExternalID == "" {
+	if p.externalID == "" {
 		return nil
 	}
-	return s.upsertGrant(ctx, g)
+	return s.applyPurchase(ctx, p)
 }
 
 func (s *Service) onInvoicePaid(ctx context.Context, raw json.RawMessage) error {
@@ -97,20 +115,20 @@ func (s *Service) onInvoicePaid(ctx context.Context, raw json.RawMessage) error 
 	if sub == "" {
 		return nil // not a subscription invoice
 	}
-	g := models.Grant{
-		Source: models.SourceStripeSubscription, ExternalID: sub,
-		UserID: meta["user_id"], TierID: meta["tier_id"],
-		Refs: nonEmpty(inv.ID, inv.PaymentIntent, inv.Charge),
+	p := purchase{
+		source: models.SourceStripeSubscription, externalID: sub,
+		userID: meta["user_id"], tierID: meta["tier_id"], productID: meta["product_id"],
+		quantity: inv.quantity(), refs: nonEmpty(inv.ID, inv.PaymentIntent, inv.Charge),
 	}
 	if end := inv.periodEnd(); end > 0 {
 		t := time.Unix(end, 0).UTC()
-		g.ValidUntil = &t
+		p.validUntil = &t
 	}
-	return s.upsertGrant(ctx, g)
+	return s.applyPurchase(ctx, p)
 }
 
-// onSubscriptionUpdated ends the grant when Stripe gives up on a subscription. past_due is
-// left active: Stripe is still retrying the payment.
+// onSubscriptionUpdated ends the grants when Stripe gives up on a subscription, and follows a
+// quantity change. past_due is left active: Stripe is still retrying the payment.
 func (s *Service) onSubscriptionUpdated(ctx context.Context, raw json.RawMessage) error {
 	var sub subscription
 	if err := json.Unmarshal(raw, &sub); err != nil {
@@ -118,9 +136,9 @@ func (s *Service) onSubscriptionUpdated(ctx context.Context, raw json.RawMessage
 	}
 	switch sub.Status {
 	case "unpaid", "canceled", "incomplete_expired":
-		return s.endGrant(ctx, models.SourceStripeSubscription, sub.ID)
+		return s.endGrants(ctx, models.SourceStripeSubscription, sub.ID)
 	}
-	return nil
+	return s.applyQuantity(ctx, sub)
 }
 
 func (s *Service) onSubscriptionDeleted(ctx context.Context, raw json.RawMessage) error {
@@ -128,10 +146,10 @@ func (s *Service) onSubscriptionDeleted(ctx context.Context, raw json.RawMessage
 	if err := json.Unmarshal(raw, &sub); err != nil {
 		return err
 	}
-	return s.endGrant(ctx, models.SourceStripeSubscription, sub.ID)
+	return s.endGrants(ctx, models.SourceStripeSubscription, sub.ID)
 }
 
-// onChargeRefunded revokes only on a full refund; a partial refund leaves the grant alone.
+// onChargeRefunded revokes only on a full refund; a partial refund leaves the grants alone.
 func (s *Service) onChargeRefunded(ctx context.Context, raw json.RawMessage) error {
 	var ch charge
 	if err := json.Unmarshal(raw, &ch); err != nil {
@@ -151,33 +169,92 @@ func (s *Service) onDispute(ctx context.Context, raw json.RawMessage) error {
 	return s.revoke(ctx, d.Charge, d.PaymentIntent)
 }
 
-// upsertGrant creates the grant for (source, external id) or folds in a later event: it
-// reactivates an ended grant, only ever extends valid_until, and unions refs. A revoked grant
-// is never touched. An event that would create a grant without knowing the user is ignored.
-func (s *Service) upsertGrant(ctx context.Context, in models.Grant) error {
-	cur, err := s.store.GrantByExternal(ctx, in.Source, in.ExternalID)
-	if errors.Is(err, data.ErrNotFound) {
-		if in.UserID == "" {
-			logging.Logger.Warn("stripe event cannot create a grant without a user", "external_id", in.ExternalID)
-			return nil
-		}
-		in.Status = models.GrantActive
-		return s.store.InsertGrant(ctx, &in, systemActor)
+// wanted expands a purchase into the grants it should have: one key-level grant per entitlement
+// of a product (value x quantity; a flag is simply on), or a single tier grant. A product that
+// no longer exists yields none.
+func (s *Service) wanted(ctx context.Context, p purchase) ([]models.Grant, error) {
+	base := models.Grant{
+		UserID: p.userID, Source: p.source, ExternalID: p.externalID,
+		ValidUntil: p.validUntil, Refs: p.refs, Status: models.GrantActive,
 	}
-	if err != nil || cur.Status == models.GrantRevoked {
+	switch {
+	case p.productID != "":
+		products, err := s.store.GetProducts(ctx, []string{p.productID})
+		if err != nil {
+			return nil, err
+		}
+		if len(products) == 0 {
+			logging.Logger.Warn("stripe event names a product that is not in the catalog", "product", p.productID, "external_id", p.externalID)
+			return nil, nil
+		}
+		out := make([]models.Grant, 0, len(products[0].Entitlements))
+		for _, e := range products[0].Entitlements {
+			g := base
+			g.Key, g.Value, g.ProductID, g.Quantity = e.Key, grantValue(e, p.quantity), p.productID, p.quantity
+			out = append(out, g)
+		}
+		return out, nil
+	case p.tierID != "":
+		g := base
+		g.TierID = p.tierID
+		return []models.Grant{g}, nil
+	}
+	return nil, nil
+}
+
+func grantValue(e models.ProductEntitlement, quantity int64) int64 {
+	if e.Type == models.TypeFlag {
+		return 1
+	}
+	return e.Value * quantity
+}
+
+// applyPurchase creates the grants a purchase should have and folds a later event into the ones
+// that exist: it reactivates an ended grant, only ever extends valid_until, and unions refs. A
+// revoked grant is never touched. Existing grants are updated even when the event carries no
+// product or tier (a renewal invoice), and an event that would create grants without knowing
+// the user is ignored.
+func (s *Service) applyPurchase(ctx context.Context, p purchase) error {
+	existing, err := s.store.GrantsByExternal(ctx, p.source, p.externalID)
+	if err != nil {
 		return err
 	}
+	want, err := s.wanted(ctx, p)
+	if err != nil {
+		return err
+	}
+	for i := range existing {
+		if err := s.mergeGrant(ctx, &existing[i], p); err != nil {
+			return err
+		}
+	}
+	for _, g := range want {
+		if slices.ContainsFunc(existing, func(e models.Grant) bool { return e.Key == g.Key && e.TierID == g.TierID }) {
+			continue
+		}
+		if g.UserID == "" {
+			logging.Logger.Warn("stripe event cannot create a grant without a user", "external_id", p.externalID)
+			return nil
+		}
+		if err := s.store.InsertGrant(ctx, &g, systemActor); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Service) mergeGrant(ctx context.Context, cur *models.Grant, p purchase) error {
+	if cur.Status == models.GrantRevoked {
+		return nil
+	}
 	cur.Status = models.GrantActive
-	if in.UserID != "" {
-		cur.UserID = in.UserID
+	if p.userID != "" {
+		cur.UserID = p.userID
 	}
-	if in.TierID != "" {
-		cur.TierID = in.TierID
+	if p.validUntil != nil && (cur.ValidUntil == nil || p.validUntil.After(*cur.ValidUntil)) {
+		cur.ValidUntil = p.validUntil
 	}
-	if in.ValidUntil != nil && (cur.ValidUntil == nil || in.ValidUntil.After(*cur.ValidUntil)) {
-		cur.ValidUntil = in.ValidUntil
-	}
-	for _, r := range in.Refs {
+	for _, r := range p.refs {
 		if !slices.Contains(cur.Refs, r) {
 			cur.Refs = append(cur.Refs, r)
 		}
@@ -185,18 +262,66 @@ func (s *Service) upsertGrant(ctx context.Context, in models.Grant) error {
 	return s.store.UpdateGrant(ctx, cur, systemActor)
 }
 
-func (s *Service) endGrant(ctx context.Context, source, externalID string) error {
-	g, err := s.store.GrantByExternal(ctx, source, externalID)
-	if errors.Is(err, data.ErrNotFound) {
+// applyQuantity follows a subscription quantity change: each of the subscription's grants takes
+// its entitlement's value x the new quantity. Stripe has already accepted the change, so a result
+// above a key's maximum cannot be refused here; it is logged and checks clamp it.
+func (s *Service) applyQuantity(ctx context.Context, sub subscription) error {
+	productID, qty := sub.Metadata["product_id"], sub.quantity()
+	if productID == "" || qty < 1 {
 		return nil
 	}
-	if err != nil || g.Status != models.GrantActive {
+	products, err := s.store.GetProducts(ctx, []string{productID})
+	if err != nil || len(products) == 0 {
 		return err
 	}
-	g.Status = models.GrantEnded
-	return s.store.UpdateGrant(ctx, g, systemActor)
+	grants, err := s.store.GrantsByExternal(ctx, models.SourceStripeSubscription, sub.ID)
+	if err != nil {
+		return err
+	}
+	for _, e := range products[0].Entitlements {
+		for i := range grants {
+			g := &grants[i]
+			if g.Key != e.Key || g.Status == models.GrantRevoked || (g.Quantity == qty && g.Value == grantValue(e, qty)) {
+				continue
+			}
+			g.Value, g.Quantity = grantValue(e, qty), qty
+			if err := s.store.UpdateGrant(ctx, g, systemActor); err != nil {
+				return err
+			}
+			s.warnIfOverMaximum(ctx, g)
+		}
+	}
+	return nil
 }
 
+// warnIfOverMaximum probes whether the user now holds more than the key's maximum.
+func (s *Service) warnIfOverMaximum(ctx context.Context, g *models.Grant) {
+	var exceeded catalog.MaxExceededError
+	if err := s.limits.CheckPurchase(ctx, g.UserID, []catalog.Units{{Key: g.Key}}); errors.As(err, &exceeded) {
+		logging.Logger.Warn("subscription quantity change passes the key maximum; checks clamp it",
+			"user", g.UserID, "key", g.Key, "external_id", g.ExternalID)
+	}
+}
+
+// endGrants ends every active grant of one Stripe object together.
+func (s *Service) endGrants(ctx context.Context, source, externalID string) error {
+	grants, err := s.store.GrantsByExternal(ctx, source, externalID)
+	if err != nil {
+		return err
+	}
+	for i := range grants {
+		if grants[i].Status != models.GrantActive {
+			continue
+		}
+		grants[i].Status = models.GrantEnded
+		if err := s.store.UpdateGrant(ctx, &grants[i], systemActor); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// revoke revokes every grant that names one of the Stripe objects, so a bundle goes together.
 func (s *Service) revoke(ctx context.Context, refs ...string) error {
 	for _, ref := range nonEmpty(refs...) {
 		grants, err := s.store.GrantsByRef(ctx, ref)

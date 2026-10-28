@@ -56,6 +56,9 @@ go test -race ./...
 - **Resolution:** tier values take the maximum; key-level grants add (limits) or turn a flag on.
   See `catalog/resolve.go`. A limit key's optional `max` clamps the result in `catalog/check.go`.
   Purchase checks use the unclamped value (`catalog.CheckPurchase`).
+- **Products:** a purchase makes one grant per entitlement sharing the Stripe object ID
+  (`billing/webhook.go`, `applyPurchase`); refund, dispute, and cancel act on the shared ID or
+  refs, so a bundle ends together. Grants are unique on (source, external_id, key).
 - **Audit:** catalog writes and their audit entry are not one transaction. A failed audit append
   is logged at ERROR and the write still succeeds.
 - **Delete strategy:** catalog keys and tiers are soft-deleted; the audit collection is

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/sweetrpg/common.go/logging"
+	"github.com/sweetrpg/entitlements-api/catalog"
 	"github.com/sweetrpg/entitlements-api/data"
 	"github.com/sweetrpg/entitlements-api/models"
 )
@@ -59,7 +60,7 @@ func setup(t *testing.T) (*Service, *data.MemoryStore, *fakeGateway) {
 	logging.Init()
 	st := data.NewMemoryStore()
 	gw := &fakeGateway{}
-	return New(st, gw, urls), st, gw
+	return New(st, gw, catalog.New(st), urls), st, gw
 }
 
 func apply(t *testing.T, s *Service, files ...string) {
@@ -73,11 +74,11 @@ func apply(t *testing.T, s *Service, files ...string) {
 
 func grant(t *testing.T, st *data.MemoryStore, source, ext string) *models.Grant {
 	t.Helper()
-	g, err := st.GrantByExternal(context.Background(), source, ext)
-	if err != nil {
-		t.Fatalf("grant %s/%s: %v", source, ext, err)
+	gs, err := st.GrantsByExternal(context.Background(), source, ext)
+	if err != nil || len(gs) == 0 {
+		t.Fatalf("grant %s/%s: %v (found %d)", source, ext, err, len(gs))
 	}
-	return g
+	return &gs[0]
 }
 
 func activeCount(t *testing.T, st *data.MemoryStore, user string) int {
@@ -115,8 +116,8 @@ func TestPurchaseCheckoutCreatesGrantKeyedOnPaymentIntent(t *testing.T) {
 func TestUnpaidCheckoutCreatesNothing(t *testing.T) {
 	s, st, _ := setup(t)
 	apply(t, s, "checkout_unpaid.json")
-	if _, err := st.GrantByExternal(context.Background(), models.SourceStripePurchase, "pi_2"); !errors.Is(err, data.ErrNotFound) {
-		t.Errorf("err = %v, want not found", err)
+	if gs, _ := st.GrantsByExternal(context.Background(), models.SourceStripePurchase, "pi_2"); len(gs) != 0 {
+		t.Errorf("grants = %v, want none", gs)
 	}
 }
 
@@ -185,8 +186,8 @@ func TestEventWithoutUserCreatesNoGrant(t *testing.T) {
 	if err := s.HandleEvent(context.Background(), ev); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.GrantByExternal(context.Background(), models.SourceStripePurchase, "pi_x"); !errors.Is(err, data.ErrNotFound) {
-		t.Errorf("err = %v, want not found", err)
+	if gs, _ := st.GrantsByExternal(context.Background(), models.SourceStripePurchase, "pi_x"); len(gs) != 0 {
+		t.Errorf("grants = %v, want none", gs)
 	}
 }
 
@@ -281,14 +282,14 @@ func (failingInsert) InsertGrant(context.Context, *models.Grant, string) error {
 func TestFailedEventIsNotRecordedSoStripeCanRetry(t *testing.T) {
 	logging.Init()
 	st := data.NewMemoryStore()
-	broken := New(failingInsert{st}, &fakeGateway{}, urls)
+	broken := New(failingInsert{st}, &fakeGateway{}, catalog.New(st), urls)
 	if err := broken.HandleEvent(context.Background(), loadEvent(t, "checkout_payment.json")); err == nil {
 		t.Fatal("expected error")
 	}
 	if done, _ := st.EventProcessed(context.Background(), "evt_co_pay"); done {
 		t.Fatal("failed event was recorded")
 	}
-	healthy := New(st, &fakeGateway{}, urls)
+	healthy := New(st, &fakeGateway{}, catalog.New(st), urls)
 	apply(t, healthy, "checkout_payment.json")
 	grant(t, st, models.SourceStripePurchase, "pi_1")
 }
@@ -312,7 +313,7 @@ func TestCheckoutRejectsUnmappedOrMissingTier(t *testing.T) {
 	s, st, _ := setup(t)
 	seedTier(t, st, "free", "")
 	for _, tier := range []string{"free", "ghost"} {
-		if _, err := s.Checkout(context.Background(), "user-1", "", tier); !errors.Is(err, models.ErrInvalid) {
+		if _, err := s.Checkout(context.Background(), "user-1", "", CheckoutRequest{TierID: tier}); !errors.Is(err, models.ErrInvalid) {
 			t.Errorf("tier %s: err = %v, want invalid", tier, err)
 		}
 	}
@@ -321,7 +322,7 @@ func TestCheckoutRejectsUnmappedOrMissingTier(t *testing.T) {
 func TestCheckoutPassesUserTierPriceAndFixedURLs(t *testing.T) {
 	s, st, gw := setup(t)
 	seedTier(t, st, "plus", "price_plus")
-	url, err := s.Checkout(context.Background(), "user-1", "a@example.test", "plus")
+	url, err := s.Checkout(context.Background(), "user-1", "a@example.test", CheckoutRequest{TierID: "plus"})
 	if err != nil || url == "" {
 		t.Fatalf("url = %q err = %v", url, err)
 	}
@@ -336,7 +337,7 @@ func TestCheckoutReusesKnownStripeCustomer(t *testing.T) {
 	s, st, gw := setup(t)
 	seedTier(t, st, "plus", "price_plus")
 	apply(t, s, "checkout_subscription.json")
-	if _, err := s.Checkout(context.Background(), "user-1", "", "plus"); err != nil {
+	if _, err := s.Checkout(context.Background(), "user-1", "", CheckoutRequest{TierID: "plus"}); err != nil {
 		t.Fatal(err)
 	}
 	if gw.checkout.CustomerID != "cus_1" {
