@@ -19,6 +19,8 @@ type MemoryStore struct {
 	tiers   []*models.Tier
 	grants  []models.Grant
 	audit   []models.AuditEntry
+	custs   map[string]string
+	events  map[string]bool
 	defTier string
 	now     func() time.Time
 }
@@ -26,7 +28,7 @@ type MemoryStore struct {
 // NewMemoryStore returns an empty store using the wall clock.
 func NewMemoryStore() *MemoryStore { return &MemoryStore{now: time.Now} }
 
-// AddGrant seeds a grant; grants are written by the billing flow, not by this service's API.
+// AddGrant seeds a grant for tests.
 func (m *MemoryStore) AddGrant(g models.Grant) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -200,6 +202,88 @@ func (m *MemoryStore) ActiveGrants(_ context.Context, userID string, now time.Ti
 		}
 	}
 	return out, nil
+}
+
+func (m *MemoryStore) GrantByExternal(_ context.Context, source, externalID string) (*models.Grant, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, g := range m.grants {
+		if g.Source == source && g.ExternalID == externalID {
+			c := g
+			return &c, nil
+		}
+	}
+	return nil, ErrNotFound
+}
+
+func (m *MemoryStore) GrantsByRef(_ context.Context, ref string) ([]models.Grant, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []models.Grant
+	for _, g := range m.grants {
+		if g.ExternalID == ref || slices.Contains(g.Refs, ref) {
+			out = append(out, g)
+		}
+	}
+	return out, nil
+}
+
+func (m *MemoryStore) InsertGrant(_ context.Context, g *models.Grant, actor string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, e := range m.grants {
+		if g.ExternalID != "" && e.Source == g.Source && e.ExternalID == g.ExternalID {
+			return ErrDuplicate
+		}
+	}
+	mcore.StampCreate(&g.Auditable, actor, m.now().UTC())
+	m.grants = append(m.grants, *g)
+	return nil
+}
+
+func (m *MemoryStore) UpdateGrant(_ context.Context, g *models.Grant, actor string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, e := range m.grants {
+		if e.Source == g.Source && e.ExternalID == g.ExternalID {
+			mcore.StampUpdate(&g.Auditable, actor, m.now().UTC())
+			m.grants[i] = *g
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (m *MemoryStore) StripeCustomer(_ context.Context, userID string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.custs[userID], nil
+}
+
+func (m *MemoryStore) SaveStripeCustomer(_ context.Context, userID, customerID, _ string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.custs == nil {
+		m.custs = map[string]string{}
+	}
+	m.custs[userID] = customerID
+	return nil
+}
+
+func (m *MemoryStore) EventProcessed(_ context.Context, eventID string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.events[eventID], nil
+}
+
+func (m *MemoryStore) RecordEvent(_ context.Context, eventID, _ string, _ time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.events == nil {
+		m.events = map[string]bool{}
+	}
+	m.events[eventID] = true
+	return nil
 }
 
 func (m *MemoryStore) AppendAudit(_ context.Context, e models.AuditEntry) error {

@@ -1,0 +1,1 @@
+{"id":"evt_co_sub","object":"event","type":"checkout.session.completed","data":{"object":{"id":"cs_sub_1","object":"checkout.session","mode":"subscription","payment_status":"paid","customer":"cus_1","subscription":"sub_1","payment_intent":null,"client_reference_id":"user-1","metadata":{"user_id":"user-1","tier_id":"plus"}}}}

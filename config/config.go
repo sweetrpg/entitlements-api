@@ -4,35 +4,57 @@ package config
 
 import (
 	"errors"
-	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/sweetrpg/entitlements-api/constants"
 )
 
-// minTokenLength rejects trivially guessable service tokens.
-const minTokenLength = 32
-
 // Config holds validated settings.
 type Config struct {
 	AuthAPIURL  string
 	UsersAPIURL string
-	// ServiceTokens maps a bearer token to the name of the registered service that owns it.
-	ServiceTokens map[string]string
+
+	StripeSecretKey     string
+	StripeWebhookSecret string
+	CheckoutSuccessURL  string
+	CheckoutCancelURL   string
+	PortalReturnURL     string
 }
 
 // Load reads and validates settings through getenv (os.Getenv in production). Every problem is
-// reported at once.
+// reported at once, naming the setting and never its value.
 func Load(getenv func(string) string) (*Config, error) {
 	var problems []string
 
 	cfg := &Config{
-		AuthAPIURL:  getenv(constants.AUTH_API_URL),
-		UsersAPIURL: getenv(constants.USERS_API_URL),
+		AuthAPIURL:          getenv(constants.AUTH_API_URL),
+		UsersAPIURL:         getenv(constants.USERS_API_URL),
+		StripeSecretKey:     getenv(constants.STRIPE_SECRET_KEY),
+		StripeWebhookSecret: getenv(constants.STRIPE_WEBHOOK_SECRET),
+		CheckoutSuccessURL:  getenv(constants.STRIPE_CHECKOUT_SUCCESS_URL),
+		CheckoutCancelURL:   getenv(constants.STRIPE_CHECKOUT_CANCEL_URL),
+		PortalReturnURL:     getenv(constants.STRIPE_PORTAL_RETURN_URL),
 	}
-	for _, name := range []string{constants.AUTH_API_URL, constants.USERS_API_URL} {
+	for _, name := range []string{constants.AUTH_API_URL, constants.USERS_API_URL, constants.STRIPE_SECRET_KEY, constants.STRIPE_WEBHOOK_SECRET} {
 		if getenv(name) == "" {
 			problems = append(problems, name+" is required")
+		}
+	}
+
+	if cfg.StripeSecretKey != "" && !hasPrefix(cfg.StripeSecretKey, "sk_", "rk_") {
+		problems = append(problems, constants.STRIPE_SECRET_KEY+" must be a Stripe secret or restricted key")
+	}
+	if cfg.StripeWebhookSecret != "" && !hasPrefix(cfg.StripeWebhookSecret, "whsec_") {
+		problems = append(problems, constants.STRIPE_WEBHOOK_SECRET+" must be a Stripe webhook signing secret")
+	}
+	for name, v := range map[string]string{
+		constants.STRIPE_CHECKOUT_SUCCESS_URL: cfg.CheckoutSuccessURL,
+		constants.STRIPE_CHECKOUT_CANCEL_URL:  cfg.CheckoutCancelURL,
+		constants.STRIPE_PORTAL_RETURN_URL:    cfg.PortalReturnURL,
+	} {
+		if !absoluteURL(v) {
+			problems = append(problems, name+" must be an absolute http(s) URL")
 		}
 	}
 
@@ -40,42 +62,22 @@ func Load(getenv func(string) string) (*Config, error) {
 		problems = append(problems, "DB_URI (or DB_HOST and DB_NAME) is required")
 	}
 
-	tokens, err := parseServiceTokens(getenv(constants.SERVICE_TOKENS))
-	if err != nil {
-		problems = append(problems, constants.SERVICE_TOKENS+": "+err.Error())
-	}
-	cfg.ServiceTokens = tokens
-
 	if len(problems) > 0 {
 		return nil, errors.New("invalid configuration: " + strings.Join(problems, "; "))
 	}
 	return cfg, nil
 }
 
-// parseServiceTokens parses "name=token,name=token". Names and tokens must be unique so a
-// token always identifies exactly one service.
-func parseServiceTokens(raw string) (map[string]string, error) {
-	if strings.TrimSpace(raw) == "" {
-		return nil, errors.New("at least one name=token pair is required")
+func hasPrefix(v string, prefixes ...string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(v, p) {
+			return true
+		}
 	}
-	byToken := map[string]string{}
-	names := map[string]bool{}
-	for _, pair := range strings.Split(raw, ",") {
-		name, token, ok := strings.Cut(strings.TrimSpace(pair), "=")
-		if !ok || name == "" {
-			return nil, errors.New("entries must look like name=token")
-		}
-		if len(token) < minTokenLength {
-			return nil, fmt.Errorf("token for %q is shorter than %d characters", name, minTokenLength)
-		}
-		if names[name] {
-			return nil, fmt.Errorf("service %q is listed twice", name)
-		}
-		if _, dup := byToken[token]; dup {
-			return nil, fmt.Errorf("service %q reuses another service's token", name)
-		}
-		names[name] = true
-		byToken[token] = name
-	}
-	return byToken, nil
+	return false
+}
+
+func absoluteURL(v string) bool {
+	u, err := url.Parse(v)
+	return err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Host != ""
 }

@@ -33,10 +33,16 @@ func (s *MongoStore) EnsureIndexes(ctx context.Context) error {
 	liveOnly := options.Index().SetUnique(true).
 		SetPartialFilterExpression(bson.D{{Key: "deleted_at", Value: bson.D{{Key: "$exists", Value: false}}}})
 	idx := map[string][]mongo.IndexModel{
-		constants.KeysCollection:   {{Keys: bson.D{{Key: "key", Value: 1}}, Options: liveOnly}},
-		constants.TiersCollection:  {{Keys: bson.D{{Key: "slug", Value: 1}}, Options: liveOnly}},
-		constants.GrantsCollection: {{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "status", Value: 1}}}},
-		constants.AuditCollection:  {{Keys: bson.D{{Key: "at", Value: -1}}}},
+		constants.KeysCollection:  {{Keys: bson.D{{Key: "key", Value: 1}}, Options: liveOnly}},
+		constants.TiersCollection: {{Keys: bson.D{{Key: "slug", Value: 1}}, Options: liveOnly}},
+		constants.GrantsCollection: {
+			{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "status", Value: 1}}},
+			{Keys: bson.D{{Key: "source", Value: 1}, {Key: "external_id", Value: 1}}, Options: options.Index().SetUnique(true).
+				SetPartialFilterExpression(bson.D{{Key: "external_id", Value: bson.D{{Key: "$exists", Value: true}}}})},
+			{Keys: bson.D{{Key: "refs", Value: 1}}},
+		},
+		constants.StripeCustomersCollection: {{Keys: bson.D{{Key: "user_id", Value: 1}}, Options: options.Index().SetUnique(true)}},
+		constants.AuditCollection:           {{Keys: bson.D{{Key: "at", Value: -1}}}},
 	}
 	for coll, ms := range idx {
 		if _, err := s.db.Collection(coll).Indexes().CreateMany(ctx, ms); err != nil {
@@ -184,6 +190,68 @@ func (s *MongoStore) ActiveGrants(ctx context.Context, userID string, now time.T
 		}},
 	}
 	return find[models.Grant](ctx, s.db.Collection(constants.GrantsCollection), f, nil)
+}
+
+func (s *MongoStore) GrantByExternal(ctx context.Context, source, externalID string) (*models.Grant, error) {
+	var g models.Grant
+	err := s.db.Collection(constants.GrantsCollection).
+		FindOne(ctx, bson.D{{Key: "source", Value: source}, {Key: "external_id", Value: externalID}}).Decode(&g)
+	return &g, mapNoDoc(err)
+}
+
+func (s *MongoStore) GrantsByRef(ctx context.Context, ref string) ([]models.Grant, error) {
+	f := bson.D{{Key: "$or", Value: bson.A{
+		bson.D{{Key: "external_id", Value: ref}},
+		bson.D{{Key: "refs", Value: ref}},
+	}}}
+	return find[models.Grant](ctx, s.db.Collection(constants.GrantsCollection), f, nil)
+}
+
+func (s *MongoStore) InsertGrant(ctx context.Context, g *models.Grant, actor string) error {
+	mcore.StampCreate(&g.Auditable, actor, time.Now().UTC())
+	return s.insert(ctx, constants.GrantsCollection, g)
+}
+
+func (s *MongoStore) UpdateGrant(ctx context.Context, g *models.Grant, actor string) error {
+	mcore.StampUpdate(&g.Auditable, actor, time.Now().UTC())
+	res, err := s.db.Collection(constants.GrantsCollection).ReplaceOne(ctx, bson.D{{Key: "_id", Value: g.ID}}, g)
+	if err == nil && res.MatchedCount == 0 {
+		return ErrNotFound
+	}
+	return err
+}
+
+func (s *MongoStore) StripeCustomer(ctx context.Context, userID string) (string, error) {
+	var c models.StripeCustomer
+	err := s.db.Collection(constants.StripeCustomersCollection).FindOne(ctx, bson.D{{Key: "user_id", Value: userID}}).Decode(&c)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return "", nil
+	}
+	return c.CustomerID, err
+}
+
+func (s *MongoStore) SaveStripeCustomer(ctx context.Context, userID, customerID, actor string) error {
+	now := time.Now().UTC()
+	update := bson.D{
+		{Key: "$set", Value: bson.D{{Key: "customer_id", Value: customerID}, {Key: "updated_at", Value: now}, {Key: "updated_by", Value: actor}}},
+		{Key: "$setOnInsert", Value: bson.D{{Key: "created_at", Value: now}, {Key: "created_by", Value: actor}}},
+	}
+	_, err := s.db.Collection(constants.StripeCustomersCollection).
+		UpdateOne(ctx, bson.D{{Key: "user_id", Value: userID}}, update, options.Update().SetUpsert(true))
+	return err
+}
+
+func (s *MongoStore) EventProcessed(ctx context.Context, eventID string) (bool, error) {
+	n, err := s.db.Collection(constants.StripeEventsCollection).CountDocuments(ctx, bson.D{{Key: "_id", Value: eventID}}, options.Count().SetLimit(1))
+	return n > 0, err
+}
+
+func (s *MongoStore) RecordEvent(ctx context.Context, eventID, eventType string, at time.Time) error {
+	err := s.insert(ctx, constants.StripeEventsCollection, bson.D{{Key: "_id", Value: eventID}, {Key: "type", Value: eventType}, {Key: "at", Value: at}})
+	if errors.Is(err, ErrDuplicate) {
+		return nil
+	}
+	return err
 }
 
 func (s *MongoStore) AppendAudit(ctx context.Context, e models.AuditEntry) error {

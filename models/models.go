@@ -26,8 +26,13 @@ const (
 const (
 	GrantActive = "active"
 	GrantEnded  = "ended"
+	// GrantRevoked is sticky: a refund or dispute ends the grant and later billing events do not
+	// bring it back. Only an administrator reinstates it.
+	GrantRevoked = "revoked"
 
-	SourceAdmin = "admin"
+	SourceAdmin              = "admin"
+	SourceStripeSubscription = "stripe_subscription"
+	SourceStripePurchase     = "stripe_purchase"
 )
 
 var (
@@ -77,15 +82,18 @@ type CatalogConfig struct {
 // Grant gives a user a tier or a single key value. Exactly one of TierID or Key is set. Grants
 // are written by the billing flow and by admins; this service only reads them for checks.
 type Grant struct {
-	ID              primitive.ObjectID `bson:"_id,omitempty"`
-	UserID          string             `bson:"user_id"`
-	TierID          string             `bson:"tier_id,omitempty"`
-	Key             string             `bson:"key,omitempty"`
-	Value           int64              `bson:"value,omitempty"`
-	Source          string             `bson:"source"`
-	ExternalID      string             `bson:"external_id,omitempty"`
-	Status          string             `bson:"status"`
-	ValidUntil      *time.Time         `bson:"valid_until,omitempty"`
+	ID         primitive.ObjectID `bson:"_id,omitempty"`
+	UserID     string             `bson:"user_id"`
+	TierID     string             `bson:"tier_id,omitempty"`
+	Key        string             `bson:"key,omitempty"`
+	Value      int64              `bson:"value,omitempty"`
+	Source     string             `bson:"source"`
+	ExternalID string             `bson:"external_id,omitempty"`
+	// Refs are other Stripe object IDs (invoice, payment intent, charge) a refund or dispute
+	// event can name instead of ExternalID.
+	Refs            []string   `bson:"refs,omitempty"`
+	Status          string     `bson:"status"`
+	ValidUntil      *time.Time `bson:"valid_until,omitempty"`
 	mcore.Auditable `bson:",inline"`
 }
 
@@ -93,6 +101,13 @@ type Grant struct {
 // the same rule.
 func (g Grant) ActiveAt(now time.Time) bool {
 	return g.Status == GrantActive && (g.ValidUntil == nil || g.ValidUntil.After(now))
+}
+
+// StripeCustomer maps a user to their Stripe customer so the billing portal can be opened.
+type StripeCustomer struct {
+	UserID          string `bson:"user_id"`
+	CustomerID      string `bson:"customer_id"`
+	mcore.Auditable `bson:",inline"`
 }
 
 // AuditEntry records one catalog write. The collection is append-only.

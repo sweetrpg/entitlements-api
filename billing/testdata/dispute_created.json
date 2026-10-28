@@ -1,0 +1,1 @@
+{"id":"evt_dp_new","object":"event","type":"charge.dispute.created","data":{"object":{"id":"dp_1","object":"dispute","charge":"ch_1","payment_intent":"pi_1"}}}

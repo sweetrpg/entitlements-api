@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sweetrpg/authz-client.go/authz"
 	"github.com/sweetrpg/common.go/logging"
+	"github.com/sweetrpg/entitlements-api/billing"
 	"github.com/sweetrpg/entitlements-api/catalog"
 	"github.com/sweetrpg/entitlements-api/config"
 	"github.com/sweetrpg/entitlements-api/data"
@@ -17,9 +18,9 @@ import (
 )
 
 const (
-	svcToken = "initiative-service-token-0123456789abcdef"
-	adminTok = "admin-user-token"
-	userTok  = "plain-user-token"
+	webhookSecret = "whsec_test_secret"
+	adminTok      = "admin-user-token"
+	userTok       = "plain-user-token"
 )
 
 // identityStub stands in for auth-api's /authz/check and users-api's /profile.
@@ -51,9 +52,11 @@ func newRouter(t *testing.T) (*gin.Engine, *data.MemoryStore) {
 	gin.SetMode(gin.TestMode)
 	st := data.NewMemoryStore()
 	id := identityStub(t)
-	cfg := &config.Config{ServiceTokens: map[string]string{svcToken: "initiative-api"}}
+	cfg := &config.Config{}
 	r := gin.New()
-	SetupHandlers(r, catalog.New(st), authz.NewClient(id.URL, id.URL), cfg)
+	cfg.StripeWebhookSecret = webhookSecret
+	bill := billing.New(st, fakeStripe{}, billing.URLs{})
+	SetupHandlers(r, catalog.New(st), bill, authz.NewClient(id.URL, id.URL), cfg)
 	return r, st
 }
 
@@ -152,19 +155,28 @@ func seedChecks(t *testing.T) (*gin.Engine, *data.MemoryStore) {
 	return r, st
 }
 
-func TestChecksRejectUnregisteredCallers(t *testing.T) {
+func TestChecksRequireAVerifiedUserToken(t *testing.T) {
 	r, _ := seedChecks(t)
-	path := "/check?user_id=u1&key=initiative.theme_slots"
+	path := "/check?key=initiative.theme_slots"
 	mustCode(t, do(r, "GET", path, "", ""), http.StatusUnauthorized)
-	mustCode(t, do(r, "GET", path, "wrong-token", ""), http.StatusUnauthorized)
-	mustCode(t, do(r, "GET", path, adminTok, ""), http.StatusUnauthorized)
-	mustCode(t, do(r, "POST", "/check/batch", "", `{"user_id":"u1","keys":["a.b"]}`), http.StatusUnauthorized)
-	mustCode(t, do(r, "GET", path, svcToken, ""), http.StatusOK)
+	mustCode(t, do(r, "GET", path, "forged-token", ""), http.StatusUnauthorized)
+	mustCode(t, do(r, "POST", "/check/batch", "", `{"keys":["initiative.deluxe"]}`), http.StatusUnauthorized)
+	mustCode(t, do(r, "GET", path, userTok, ""), http.StatusOK)
+}
+
+func TestCheckIgnoresUserIDFromTheRequest(t *testing.T) {
+	r, st := seedChecks(t)
+	st.AddGrant(models.Grant{UserID: "someone-else", Key: "initiative.theme_slots", Value: 99, Status: models.GrantActive})
+	rec := do(r, "GET", "/check?key=initiative.theme_slots&user_id=someone-else", userTok, "")
+	mustCode(t, rec, http.StatusOK)
+	if !strings.Contains(rec.Body.String(), `"value":5`) {
+		t.Errorf("body = %s", rec.Body)
+	}
 }
 
 func TestSingleCheck(t *testing.T) {
 	r, _ := seedChecks(t)
-	rec := do(r, "GET", "/check?user_id=u1&key=initiative.theme_slots", svcToken, "")
+	rec := do(r, "GET", "/check?key=initiative.theme_slots", userTok, "")
 	mustCode(t, rec, http.StatusOK)
 	var vo CheckVO
 	_ = json.Unmarshal(rec.Body.Bytes(), &vo)
@@ -174,7 +186,7 @@ func TestSingleCheck(t *testing.T) {
 	if cc := rec.Header().Get("Cache-Control"); cc != "private, max-age=60" {
 		t.Errorf("Cache-Control = %q", cc)
 	}
-	rec = do(r, "GET", "/check?user_id=u1&key=initiative.deluxe", svcToken, "")
+	rec = do(r, "GET", "/check?key=initiative.deluxe", userTok, "")
 	if !strings.Contains(rec.Body.String(), `"value":false`) || rec.Header().Get("Cache-Control") != "no-store" {
 		t.Errorf("flag response = %s / %q", rec.Body, rec.Header().Get("Cache-Control"))
 	}
@@ -182,16 +194,15 @@ func TestSingleCheck(t *testing.T) {
 
 func TestSingleCheckErrors(t *testing.T) {
 	r, _ := seedChecks(t)
-	mustCode(t, do(r, "GET", "/check?user_id=u1&key=initiative.theme_slotz", svcToken, ""), http.StatusNotFound)
-	mustCode(t, do(r, "GET", "/check?key=initiative.deluxe", svcToken, ""), http.StatusBadRequest)
-	mustCode(t, do(r, "GET", "/check?user_id=u1", svcToken, ""), http.StatusBadRequest)
+	mustCode(t, do(r, "GET", "/check?key=initiative.theme_slotz", userTok, ""), http.StatusNotFound)
+	mustCode(t, do(r, "GET", "/check", userTok, ""), http.StatusBadRequest)
 }
 
 func TestBatchCheck(t *testing.T) {
 	r, st := seedChecks(t)
-	st.AddGrant(models.Grant{UserID: "u1", Key: "initiative.theme_slots", Value: 12, Status: models.GrantActive})
+	st.AddGrant(models.Grant{UserID: "canonical-" + userTok, Key: "initiative.theme_slots", Value: 12, Status: models.GrantActive})
 
-	rec := do(r, "POST", "/check/batch", svcToken, `{"user_id":"u1","prefix":"initiative."}`)
+	rec := do(r, "POST", "/check/batch", userTok, `{"prefix":"initiative."}`)
 	mustCode(t, rec, http.StatusOK)
 	var out BatchCheckVO
 	_ = json.Unmarshal(rec.Body.Bytes(), &out)
@@ -199,18 +210,17 @@ func TestBatchCheck(t *testing.T) {
 		t.Errorf("out = %+v", out)
 	}
 
-	rec = do(r, "POST", "/check/batch", svcToken, `{"user_id":"u1","keys":["initiative.deluxe"]}`)
-	mustCode(t, rec, http.StatusOK)
+	mustCode(t, do(r, "POST", "/check/batch", userTok, `{"keys":["initiative.deluxe"]}`), http.StatusOK)
 }
 
 func TestBatchCheckErrors(t *testing.T) {
 	r, _ := seedChecks(t)
-	mustCode(t, do(r, "POST", "/check/batch", svcToken, `{"keys":["a.b"]}`), http.StatusBadRequest)
-	mustCode(t, do(r, "POST", "/check/batch", svcToken, `{"user_id":"u1"}`), http.StatusBadRequest)
-	mustCode(t, do(r, "POST", "/check/batch", svcToken, `{"user_id":"u1","keys":["a.b"],"prefix":"a."}`), http.StatusBadRequest)
-	mustCode(t, do(r, "POST", "/check/batch", svcToken, `{"user_id":"u1","keys":["initiative.nope"]}`), http.StatusNotFound)
+	mustCode(t, do(r, "POST", "/check/batch", userTok, `{not json`), http.StatusBadRequest)
+	mustCode(t, do(r, "POST", "/check/batch", userTok, `{}`), http.StatusBadRequest)
+	mustCode(t, do(r, "POST", "/check/batch", userTok, `{"keys":["a.b"],"prefix":"a."}`), http.StatusBadRequest)
+	mustCode(t, do(r, "POST", "/check/batch", userTok, `{"keys":["initiative.nope"]}`), http.StatusNotFound)
 	keys := strings.Repeat(`"a.b",`, 201)
-	mustCode(t, do(r, "POST", "/check/batch", svcToken, `{"user_id":"u1","keys":[`+keys[:len(keys)-1]+`]}`), http.StatusBadRequest)
+	mustCode(t, do(r, "POST", "/check/batch", userTok, `{"keys":[`+keys[:len(keys)-1]+`]}`), http.StatusBadRequest)
 }
 
 func TestPing(t *testing.T) {

@@ -1,0 +1,83 @@
+// Package billing connects the entitlements catalog to Stripe: Checkout and billing-portal
+// sessions going out, signed webhook events coming in as grants.
+package billing
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/stripe/stripe-go/v87"
+)
+
+// CheckoutParams is everything needed to start a Checkout session for one purchasable tier.
+type CheckoutParams struct {
+	PriceID    string
+	UserID     string
+	TierID     string
+	Email      string // optional; Checkout asks for one when empty
+	CustomerID string // optional; reuses the user's existing Stripe customer
+	SuccessURL string
+	CancelURL  string
+}
+
+// Gateway is the slice of Stripe's API this service calls. Tests use a fake; StripeGateway is
+// the only implementation that touches the network.
+type Gateway interface {
+	CreateCheckout(ctx context.Context, p CheckoutParams) (url string, err error)
+	CreatePortal(ctx context.Context, customerID, returnURL string) (url string, err error)
+}
+
+// StripeGateway calls the live Stripe API. It is a thin translation layer with no rules of its
+// own, so it is not unit-tested; the rules live in Service.
+type StripeGateway struct{ client *stripe.Client }
+
+// NewStripeGateway builds a gateway authenticated with the secret key.
+func NewStripeGateway(secretKey string) *StripeGateway {
+	return &StripeGateway{client: stripe.NewClient(secretKey)}
+}
+
+// CreateCheckout opens a subscription-mode session for a recurring price and a payment-mode
+// session for a one-off price. The user and tier ride along as metadata so webhook events can
+// be turned into grants without a lookup.
+func (g *StripeGateway) CreateCheckout(ctx context.Context, p CheckoutParams) (string, error) {
+	price, err := g.client.V1Prices.Retrieve(ctx, p.PriceID, nil)
+	if err != nil {
+		return "", fmt.Errorf("retrieve price: %w", err)
+	}
+	meta := map[string]string{"user_id": p.UserID, "tier_id": p.TierID}
+	params := &stripe.CheckoutSessionCreateParams{
+		SuccessURL:        stripe.String(p.SuccessURL),
+		CancelURL:         stripe.String(p.CancelURL),
+		ClientReferenceID: stripe.String(p.UserID),
+		Metadata:          meta,
+		LineItems:         []*stripe.CheckoutSessionCreateLineItemParams{{Price: stripe.String(p.PriceID), Quantity: stripe.Int64(1)}},
+	}
+	if price.Type == stripe.PriceTypeRecurring {
+		params.Mode = stripe.String(string(stripe.CheckoutSessionModeSubscription))
+		params.SubscriptionData = &stripe.CheckoutSessionCreateSubscriptionDataParams{Metadata: meta}
+	} else {
+		params.Mode = stripe.String(string(stripe.CheckoutSessionModePayment))
+	}
+	if p.CustomerID != "" {
+		params.Customer = stripe.String(p.CustomerID)
+	} else if p.Email != "" {
+		params.CustomerEmail = stripe.String(p.Email)
+	}
+	sess, err := g.client.V1CheckoutSessions.Create(ctx, params)
+	if err != nil {
+		return "", fmt.Errorf("create checkout session: %w", err)
+	}
+	return sess.URL, nil
+}
+
+// CreatePortal opens the Stripe billing portal for a customer.
+func (g *StripeGateway) CreatePortal(ctx context.Context, customerID, returnURL string) (string, error) {
+	sess, err := g.client.V1BillingPortalSessions.Create(ctx, &stripe.BillingPortalSessionCreateParams{
+		Customer:  stripe.String(customerID),
+		ReturnURL: stripe.String(returnURL),
+	})
+	if err != nil {
+		return "", fmt.Errorf("create portal session: %w", err)
+	}
+	return sess.URL, nil
+}

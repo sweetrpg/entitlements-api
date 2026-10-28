@@ -10,9 +10,6 @@ and grants as data; the effective value for a subject is the max across the defa
 that subject's active grants. Stripe is the only billing provider. Consumers enforce entitlements
 and fail closed on creates. Design: `sweetrpg/platform`'s PADR-0034 (proposed).
 
-No service code exists yet. The repo was scaffolded with CI, release, and Docker workflows
-before implementation started.
-
 ## Platform Conventions and Decisions
 
 This repo is a submodule of `sweetrpg/platform`. Platform-wide conventions and Architecture
@@ -50,11 +47,18 @@ go test -race ./...
 
 ## Service Notes
 
-- **Service credentials (follow-up):** `/check` callers authenticate with a bearer token listed
-  in `SERVICE_TOKENS` (`name=token,...`). The platform has no service-credential standard yet;
-  this env registry is the interim mechanism, with the value supplied by an ExternalSecret. Revisit
-  when a platform-wide service identity exists.
+- **Auth:** zero trust. Checks require the end user's bearer token, verified through auth-api
+  (Auth0) with the canonical user ID resolved via users-api. No service tokens, and no user ID
+  taken from the request.
 - **Audit:** catalog writes and their audit entry are not one transaction. A failed audit append
   is logged at ERROR and the write still succeeds.
 - **Delete strategy:** catalog keys and tiers are soft-deleted; the audit collection is
-  append-only. Grants are written by the billing flow, read-only here.
+  append-only. Grants are created only by the Stripe webhook handler (and admins).
+- **Webhook:** `POST /webhooks/stripe` is the one public route. The Stripe signature over the raw
+  body is its only authentication; nothing is read or written before it verifies. Event objects
+  are decoded with local structs (`billing/events.go`), not SDK types, so a Stripe API-version
+  change cannot break fields we do not read.
+- **Revoked is sticky:** refund and dispute set `revoked`; later invoice or subscription events
+  never change a revoked grant.
+- **Fixtures:** `billing/testdata` events are hand-written to Stripe's documented shapes, not
+  captured from an account. No test calls Stripe.
