@@ -1,0 +1,43 @@
+{
+  "keys": [
+    {"key": "initiative.sessions_per_gm", "type": "limit", "max": 5, "ttl_seconds": 60, "description": "Sessions a game master can run"},
+    {"key": "initiative.members_per_session", "type": "limit", "max": 20, "ttl_seconds": 60, "description": "Members in one session"},
+    {"key": "initiative.saved_encounters", "type": "limit", "ttl_seconds": 60, "description": "Saved encounters"},
+    {"key": "initiative.saved_rosters", "type": "limit", "ttl_seconds": 60, "description": "Saved rosters"},
+    {"key": "initiative.theme_slots", "type": "limit", "ttl_seconds": 60, "description": "Custom theme slots"},
+    {"key": "initiative.live_subscriptions", "type": "limit", "ttl_seconds": 60, "description": "Live subscriptions"},
+    {"key": "initiative.integration_credentials", "type": "limit", "ttl_seconds": 60, "description": "Stored integration credentials"},
+    {"key": "initiative.packaged_themes", "type": "flag", "ttl_seconds": 60, "description": "Packaged themes unlocked"},
+    {"key": "initiative.customization", "type": "flag", "ttl_seconds": 60, "description": "Theme customization unlocked"},
+    {"key": "initiative.game_systems_extra", "type": "flag", "ttl_seconds": 60, "description": "Additional game systems unlocked"}
+  ],
+  "default_tier": "free",
+  "tiers": [
+    {
+      "id": "free",
+      "name": "Free",
+      "description": "Every user holds this tier",
+      "values": {
+        "initiative.sessions_per_gm": 1,
+        "initiative.members_per_session": 4,
+        "initiative.saved_encounters": 1,
+        "initiative.saved_rosters": 1,
+        "initiative.theme_slots": 0,
+        "initiative.live_subscriptions": 3,
+        "initiative.integration_credentials": 3,
+        "initiative.packaged_themes": false,
+        "initiative.customization": false,
+        "initiative.game_systems_extra": false
+      }
+    }
+  ],
+  "products": [
+    {"id": "session", "name": "Session", "description": "One more session, with a quantity", "billing": "recurring", "repeatable": true, "entitlements": {"initiative.sessions_per_gm": 1}},
+    {"id": "session-pack", "name": "Session pack", "description": "Four more sessions at a discount", "billing": "recurring", "entitlements": {"initiative.sessions_per_gm": 4}},
+    {"id": "encounters", "name": "Encounters", "description": "Five more saved encounters per unit", "billing": "recurring", "repeatable": true, "entitlements": {"initiative.saved_encounters": 5}},
+    {"id": "rosters", "name": "Rosters", "description": "Five more saved rosters per unit", "billing": "recurring", "repeatable": true, "entitlements": {"initiative.saved_rosters": 5}},
+    {"id": "themes", "name": "Themes", "description": "Packaged themes, customization, and one theme slot", "billing": "one_off", "entitlements": {"initiative.packaged_themes": true, "initiative.customization": true, "initiative.theme_slots": 1}},
+    {"id": "theme-slot", "name": "Theme slot", "description": "One more theme slot", "billing": "one_off", "repeatable": true, "entitlements": {"initiative.theme_slots": 1}},
+    {"id": "game-systems", "name": "Game systems", "description": "Additional game systems", "billing": "one_off", "entitlements": {"initiative.game_systems_extra": true}}
+  ]
+}

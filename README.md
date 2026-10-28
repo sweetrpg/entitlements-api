@@ -69,6 +69,24 @@ logged, and checks clamp it. Soft-deleting a product does not touch grants alrea
 Upgrade note: grants are unique on `(source, external_id, key)`. `EnsureIndexes` drops the earlier
 `(source, external_id)` index so a bundle's grants can share an ID.
 
+## Seed data
+
+`seed/initiative.json` holds the Initiative keys (types and maxima), the `free` default tier, and
+the products. It is data, reviewed by product, not code. Load it through the admin API with an
+administrator's token:
+
+```bash
+ENTITLEMENTS_API_URL=https://dev.sweetrpg.com/api/1/entitlements \
+ENTITLEMENTS_ADMIN_TOKEN=... \
+go run ./cmd/seed-catalog -dry-run   # drop -dry-run to write
+```
+
+The loader only creates what is missing; an existing row, or an already-set default tier, is left
+alone, so re-running cannot undo an edit or clear a Stripe price ID. Products ship with no
+`stripe_price_id` (checkout rejects them) until test-mode prices exist; set each with
+`PUT /admin/products/:id`. `-file` loads a different seed. Members-per-session tiers above 4 are
+not seeded: their products are not defined yet.
+
 ## Billing
 
 Checkout and the portal send the user to Stripe-hosted pages; the redirect URLs come from config,
