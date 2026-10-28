@@ -193,23 +193,65 @@ func TestRaisingDefaultLimitNeedsNoDeploy(t *testing.T) {
 	}
 }
 
-func TestStackingTakesMaximum(t *testing.T) {
+func TestTierGrantsAreAlternativesAndKeyGrantsAdd(t *testing.T) {
 	s, st := newSvc(t)
 	seed(t, s)
 	st.AddGrant(models.Grant{UserID: "u1", TierID: "plus", Status: models.GrantActive})
-	st.AddGrant(models.Grant{UserID: "u1", Key: "initiative.theme_slots", Value: 12, Status: models.GrantActive})
 	if v := value(t, s, "u1", "initiative.theme_slots"); v != 20 {
-		t.Errorf("tier grant should win: %d", v)
+		t.Errorf("tier grant should beat the default: %d", v)
+	}
+	st.AddGrant(models.Grant{UserID: "u1", Key: "initiative.theme_slots", Value: 12, Status: models.GrantActive})
+	if v := value(t, s, "u1", "initiative.theme_slots"); v != 32 {
+		t.Errorf("key grant should add to the tier value: %d", v)
 	}
 	st.AddGrant(models.Grant{UserID: "u1", Key: "initiative.theme_slots", Value: 40, Status: models.GrantActive})
-	if v := value(t, s, "u1", "initiative.theme_slots"); v != 40 {
-		t.Errorf("key grant should win: %d", v)
+	if v := value(t, s, "u1", "initiative.theme_slots"); v != 72 {
+		t.Errorf("key grants should sum: %d", v)
 	}
 	if v := value(t, s, "u1", "initiative.deluxe"); v != 1 {
 		t.Errorf("flag from plus = %d", v)
 	}
 	if v := value(t, s, "other", "initiative.deluxe"); v != 0 {
 		t.Errorf("other user flag = %d", v)
+	}
+}
+
+func TestPurchasedUnitsAddToTierValueAndEndIndependently(t *testing.T) {
+	s, st := newSvc(t)
+	seed(t, s)
+	_, _ = s.UpdateTier(ctx, "admin", TierInput{Slug: "free", Name: "Free", Values: map[string]any{"initiative.theme_slots": 1.0}})
+	for _, id := range []string{"pi_1", "pi_2", "pi_3"} {
+		st.AddGrant(models.Grant{UserID: "u1", Key: "initiative.theme_slots", Value: 1, Status: models.GrantActive, Source: models.SourceStripePurchase, ExternalID: id})
+	}
+	if v := value(t, s, "u1", "initiative.theme_slots"); v != 4 {
+		t.Fatalf("value = %d, want 4", v)
+	}
+	st.AddGrant(models.Grant{UserID: "u1", Key: "initiative.theme_slots", Value: 1, Status: models.GrantRevoked, Source: models.SourceStripePurchase, ExternalID: "pi_4"})
+	if v := value(t, s, "u1", "initiative.theme_slots"); v != 4 {
+		t.Errorf("revoked unit counted: %d", v)
+	}
+}
+
+func TestKeyLevelFlagGrantTurnsFlagOnOnce(t *testing.T) {
+	s, st := newSvc(t)
+	seed(t, s)
+	if v := value(t, s, "u1", "initiative.deluxe"); v != 0 {
+		t.Fatalf("flag before grant = %d", v)
+	}
+	st.AddGrant(models.Grant{UserID: "u1", Key: "initiative.deluxe", Status: models.GrantActive})
+	st.AddGrant(models.Grant{UserID: "u1", Key: "initiative.deluxe", Value: 1, Status: models.GrantActive})
+	if v := value(t, s, "u1", "initiative.deluxe"); v != 1 {
+		t.Errorf("flag with two grants = %d, want 1", v)
+	}
+}
+
+func TestExpiredKeyGrantDoesNotAdd(t *testing.T) {
+	s, st := newSvc(t)
+	seed(t, s)
+	past := time.Now().Add(-time.Hour)
+	st.AddGrant(models.Grant{UserID: "u1", Key: "initiative.theme_slots", Value: 7, Status: models.GrantActive, ValidUntil: &past})
+	if v := value(t, s, "u1", "initiative.theme_slots"); v != 5 {
+		t.Errorf("value = %d, want the default 5", v)
 	}
 }
 

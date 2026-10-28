@@ -208,7 +208,7 @@ func TestBatchCheck(t *testing.T) {
 	mustCode(t, rec, http.StatusOK)
 	var out BatchCheckVO
 	_ = json.Unmarshal(rec.Body.Bytes(), &out)
-	if len(out.Results) != 2 || out.Results[1].Key != "initiative.theme_slots" || out.Results[1].Value != float64(12) {
+	if len(out.Results) != 2 || out.Results[1].Key != "initiative.theme_slots" || out.Results[1].Value != float64(17) {
 		t.Errorf("out = %+v", out)
 	}
 

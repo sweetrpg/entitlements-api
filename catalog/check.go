@@ -72,7 +72,11 @@ func (s *Service) resolveKeys(ctx context.Context, userID string, names []string
 		return nil, err
 	}
 
-	values := Resolve(tiers.def, tiers.granted, grants, now)
+	types := make(map[string]models.KeyType, len(byName))
+	for n, k := range byName {
+		types[n] = k.Type
+	}
+	values := Resolve(tiers.def, tiers.granted, grants, types, now)
 	out := make([]Result, 0, len(names))
 	for _, n := range names {
 		k := byName[n]
