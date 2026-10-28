@@ -25,6 +25,12 @@ Check responses: `{key, type, value, ttl_seconds}` plus `Cache-Control: private,
 `value` is a boolean for flags and an integer for limits. An unknown key returns 404 and fails a
 whole batch. A batch with both or neither of `key`/`prefix` returns 400 `invalid_selector`; more than 200 keys returns `too_many_keys`; a prefix over 128 characters returns `prefix_too_long`. Usage against a limit is the caller's to count.
 
+## Resolution
+
+`effective = max(default tier, active tier grants) + sum(active key-level grants)` for a limit
+key. A flag is on when its tier value is on or any key-level grant is active. Tiers are
+alternatives; purchased units (key-level grants) add, and each ends independently.
+
 ## Auth
 
 Zero trust: every call carries the end user's own bearer token. auth-api verifies it against Auth0
