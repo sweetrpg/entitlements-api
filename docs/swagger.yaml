@@ -1,0 +1,65 @@
+definitions:
+  vo.HealthResponseVO:
+    properties:
+      collections:
+        items:
+          type: string
+        type: array
+      database:
+        type: string
+      errors:
+        type: integer
+      messages:
+        items:
+          type: string
+        type: array
+      ping:
+        type: string
+    type: object
+  vo.PingResponseVO:
+    properties:
+      date:
+        type: string
+      hostname:
+        type: string
+    type: object
+info:
+  contact:
+    email: admin@sweetrpg.com
+    name: API Support
+    url: https://sweetrpg.com
+  description: Swagger APIs
+  license:
+    name: MIT
+    url: https://mit-license.org/
+  termsOfService: https://pilgrimagesoftware.com/terms/
+  title: Entitlements API service
+  version: "1.0"
+paths:
+  /status/health:
+    get:
+      description: Health check
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/vo.HealthResponseVO'
+      summary: Health check
+      tags:
+      - status
+  /status/ping:
+    get:
+      description: Ping
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/vo.PingResponseVO'
+      summary: Ping
+      tags:
+      - status
+swagger: "2.0"

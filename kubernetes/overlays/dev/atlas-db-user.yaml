@@ -1,0 +1,21 @@
+---
+# Service-scoped Atlas user: readWrite on this service's own database only. The shared "sweetrpg"
+# admin user is break-glass tooling, not for service use (PADR-0004).
+apiVersion: atlas.mongodb.com/v1
+kind: AtlasDatabaseUser
+
+metadata:
+  name: entitlements-api
+
+spec:
+  databaseName: admin
+  username: entitlements-api
+  passwordSecretRef:
+    name: entitlements-api-db-credentials
+  projectRef:
+    name: sweetrpg
+    namespace: sweetrpg-db
+  roles:
+    - databaseName: sweetrpg-entitlements
+      roleName: readWrite
+  x509Type: NONE

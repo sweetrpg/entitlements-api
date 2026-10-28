@@ -47,3 +47,13 @@ go build ./...
 go vet ./...
 go test -race ./...
 ```
+
+## Service Notes
+
+- **Auth:** zero trust. Checks require the end user's bearer token, verified through auth-api
+  (Auth0) with the canonical user ID resolved via users-api. No service tokens, and no user ID
+  taken from the request.
+- **Audit:** catalog writes and their audit entry are not one transaction. A failed audit append
+  is logged at ERROR and the write still succeeds.
+- **Delete strategy:** catalog keys and tiers are soft-deleted; the audit collection is
+  append-only. Grants are written by the billing flow, read-only here.
