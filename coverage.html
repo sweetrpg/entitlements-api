@@ -59,41 +59,45 @@
 				
 				<option value="file1">github.com/sweetrpg/entitlements-api/billing/gateway.go (0.0%)</option>
 				
-				<option value="file2">github.com/sweetrpg/entitlements-api/billing/service.go (81.2%)</option>
+				<option value="file2">github.com/sweetrpg/entitlements-api/billing/service.go (91.2%)</option>
 				
-				<option value="file3">github.com/sweetrpg/entitlements-api/billing/webhook.go (86.4%)</option>
+				<option value="file3">github.com/sweetrpg/entitlements-api/billing/webhook.go (85.6%)</option>
 				
 				<option value="file4">github.com/sweetrpg/entitlements-api/catalog/check.go (90.0%)</option>
 				
-				<option value="file5">github.com/sweetrpg/entitlements-api/catalog/purchase.go (90.5%)</option>
+				<option value="file5">github.com/sweetrpg/entitlements-api/catalog/products.go (93.0%)</option>
 				
-				<option value="file6">github.com/sweetrpg/entitlements-api/catalog/resolve.go (96.0%)</option>
+				<option value="file6">github.com/sweetrpg/entitlements-api/catalog/purchase.go (90.5%)</option>
 				
-				<option value="file7">github.com/sweetrpg/entitlements-api/catalog/service.go (90.5%)</option>
+				<option value="file7">github.com/sweetrpg/entitlements-api/catalog/resolve.go (96.0%)</option>
 				
-				<option value="file8">github.com/sweetrpg/entitlements-api/cmd/entitlements-api/main.go (0.0%)</option>
+				<option value="file8">github.com/sweetrpg/entitlements-api/catalog/service.go (90.5%)</option>
 				
-				<option value="file9">github.com/sweetrpg/entitlements-api/config/config.go (100.0%)</option>
+				<option value="file9">github.com/sweetrpg/entitlements-api/cmd/entitlements-api/main.go (0.0%)</option>
 				
-				<option value="file10">github.com/sweetrpg/entitlements-api/data/memory.go (34.1%)</option>
+				<option value="file10">github.com/sweetrpg/entitlements-api/config/config.go (100.0%)</option>
 				
-				<option value="file11">github.com/sweetrpg/entitlements-api/data/mongo.go (0.0%)</option>
+				<option value="file11">github.com/sweetrpg/entitlements-api/data/memory.go (26.9%)</option>
 				
-				<option value="file12">github.com/sweetrpg/entitlements-api/docs/docs.go (0.0%)</option>
+				<option value="file12">github.com/sweetrpg/entitlements-api/data/mongo.go (0.0%)</option>
 				
-				<option value="file13">github.com/sweetrpg/entitlements-api/models/models.go (100.0%)</option>
+				<option value="file13">github.com/sweetrpg/entitlements-api/docs/docs.go (0.0%)</option>
 				
-				<option value="file14">github.com/sweetrpg/entitlements-api/server/admin.go (90.1%)</option>
+				<option value="file14">github.com/sweetrpg/entitlements-api/models/models.go (96.7%)</option>
 				
-				<option value="file15">github.com/sweetrpg/entitlements-api/server/billing.go (88.1%)</option>
+				<option value="file15">github.com/sweetrpg/entitlements-api/server/admin.go (90.2%)</option>
 				
-				<option value="file16">github.com/sweetrpg/entitlements-api/server/checks.go (100.0%)</option>
+				<option value="file16">github.com/sweetrpg/entitlements-api/server/admin_products.go (100.0%)</option>
 				
-				<option value="file17">github.com/sweetrpg/entitlements-api/server/errors.go (83.3%)</option>
+				<option value="file17">github.com/sweetrpg/entitlements-api/server/billing.go (88.1%)</option>
 				
-				<option value="file18">github.com/sweetrpg/entitlements-api/server/handlers.go (100.0%)</option>
+				<option value="file18">github.com/sweetrpg/entitlements-api/server/checks.go (100.0%)</option>
 				
-				<option value="file19">github.com/sweetrpg/entitlements-api/server/status.go (54.5%)</option>
+				<option value="file19">github.com/sweetrpg/entitlements-api/server/errors.go (83.3%)</option>
+				
+				<option value="file20">github.com/sweetrpg/entitlements-api/server/handlers.go (100.0%)</option>
+				
+				<option value="file21">github.com/sweetrpg/entitlements-api/server/status.go (54.5%)</option>
 				
 				</select>
 			</div>
@@ -150,7 +154,8 @@ type invoice struct {
         } `json:"parent"`
         Lines struct {
                 Data []struct {
-                        Period struct {
+                        Quantity int64 `json:"quantity"`
+                        Period   struct {
                                 End int64 `json:"end"`
                         } `json:"period"`
                 } `json:"data"`
@@ -158,38 +163,60 @@ type invoice struct {
 }
 
 // details returns the subscription link and metadata from whichever location carries it.
-func (i invoice) details() (subscription string, metadata map[string]string) <span class="cov9" title="11">{
+func (i invoice) details() (subscription string, metadata map[string]string) <span class="cov9" title="13">{
         candidates := []*subscriptionDetails{i.SubscriptionDetails}
         if i.Parent != nil </span><span class="cov1" title="1">{
                 candidates = append(candidates, i.Parent.SubscriptionDetails)
         }</span>
-        <span class="cov9" title="11">subscription = i.Subscription
-        for _, d := range candidates </span><span class="cov10" title="12">{
+        <span class="cov9" title="13">subscription = i.Subscription
+        for _, d := range candidates </span><span class="cov10" title="14">{
                 if d == nil </span><span class="cov3" title="2">{
                         continue</span>
                 }
-                <span class="cov9" title="10">if subscription == "" </span><span class="cov1" title="1">{
+                <span class="cov9" title="12">if subscription == "" </span><span class="cov1" title="1">{
                         subscription = d.Subscription
                 }</span>
-                <span class="cov9" title="10">if metadata == nil </span><span class="cov9" title="10">{
+                <span class="cov9" title="12">if metadata == nil </span><span class="cov9" title="12">{
                         metadata = d.Metadata
                 }</span>
         }
-        <span class="cov9" title="11">return subscription, metadata</span>
+        <span class="cov9" title="13">return subscription, metadata</span>
+}
+
+// quantity is the first line's quantity, 1 if absent.
+func (i invoice) quantity() int64 <span class="cov9" title="12">{
+        if len(i.Lines.Data) &gt; 0 &amp;&amp; i.Lines.Data[0].Quantity &gt; 0 </span><span class="cov3" title="2">{
+                return i.Lines.Data[0].Quantity
+        }</span>
+        <span class="cov8" title="10">return 1</span>
 }
 
 // periodEnd is the latest period end across the invoice's lines, 0 if none.
-func (i invoice) periodEnd() int64 <span class="cov9" title="10">{
+func (i invoice) periodEnd() int64 <span class="cov9" title="12">{
         var end int64
-        for _, l := range i.Lines.Data </span><span class="cov9" title="11">{
+        for _, l := range i.Lines.Data </span><span class="cov9" title="13">{
                 end = max(end, l.Period.End)
         }</span>
-        <span class="cov9" title="10">return end</span>
+        <span class="cov9" title="12">return end</span>
 }
 
 type subscription struct {
-        ID     string `json:"id"`
-        Status string `json:"status"`
+        ID       string            `json:"id"`
+        Status   string            `json:"status"`
+        Metadata map[string]string `json:"metadata"`
+        Items    struct {
+                Data []struct {
+                        Quantity int64 `json:"quantity"`
+                } `json:"data"`
+        } `json:"items"`
+}
+
+// quantity is the first line item's quantity, 0 if there is none.
+func (s subscription) quantity() int64 <span class="cov4" title="3">{
+        if len(s.Items.Data) == 0 </span><span class="cov1" title="1">{
+                return 0
+        }</span>
+        <span class="cov3" title="2">return s.Items.Data[0].Quantity</span>
 }
 
 type charge struct {
@@ -213,6 +240,7 @@ package billing
 import (
         "context"
         "fmt"
+        "strconv"
 
         "github.com/stripe/stripe-go/v87"
 )
@@ -222,6 +250,8 @@ type CheckoutParams struct {
         PriceID    string
         UserID     string
         TierID     string
+        ProductID  string
+        Quantity   int64  // units of the price; 0 means 1
         Email      string // optional; Checkout asks for one when empty
         CustomerID string // optional; reuses the user's existing Stripe customer
         SuccessURL string
@@ -252,13 +282,20 @@ func (g *StripeGateway) CreateCheckout(ctx context.Context, p CheckoutParams) (s
         if err != nil </span><span class="cov0" title="0">{
                 return "", fmt.Errorf("retrieve price: %w", err)
         }</span>
-        <span class="cov0" title="0">meta := map[string]string{"user_id": p.UserID, "tier_id": p.TierID}
-        params := &amp;stripe.CheckoutSessionCreateParams{
+        <span class="cov0" title="0">qty := max(p.Quantity, 1)
+        meta := map[string]string{"user_id": p.UserID}
+        if p.ProductID != "" </span><span class="cov0" title="0">{
+                meta["product_id"] = p.ProductID
+                meta["quantity"] = strconv.FormatInt(qty, 10)
+        }</span> else<span class="cov0" title="0"> {
+                meta["tier_id"] = p.TierID
+        }</span>
+        <span class="cov0" title="0">params := &amp;stripe.CheckoutSessionCreateParams{
                 SuccessURL:        stripe.String(p.SuccessURL),
                 CancelURL:         stripe.String(p.CancelURL),
                 ClientReferenceID: stripe.String(p.UserID),
                 Metadata:          meta,
-                LineItems:         []*stripe.CheckoutSessionCreateLineItemParams{{Price: stripe.String(p.PriceID), Quantity: stripe.Int64(1)}},
+                LineItems:         []*stripe.CheckoutSessionCreateLineItemParams{{Price: stripe.String(p.PriceID), Quantity: stripe.Int64(qty)}},
         }
         if price.Type == stripe.PriceTypeRecurring </span><span class="cov0" title="0">{
                 params.Mode = stripe.String(string(stripe.CheckoutSessionModeSubscription))
@@ -296,7 +333,10 @@ func (g *StripeGateway) CreatePortal(ctx context.Context, customerID, returnURL 
 import (
         "context"
         "fmt"
+        "time"
 
+        "github.com/sweetrpg/entitlements-api/catalog"
+        "github.com/sweetrpg/entitlements-api/constants"
         "github.com/sweetrpg/entitlements-api/data"
         "github.com/sweetrpg/entitlements-api/models"
         mcore "github.com/sweetrpg/model-core.go/models"
@@ -309,36 +349,117 @@ type URLs struct {
         PortalReturn    string
 }
 
+// Limits is the part of the catalog service billing needs: the per-key maximum check.
+type Limits interface {
+        CheckPurchase(ctx context.Context, userID string, adds []catalog.Units) error
+}
+
 // Service starts Stripe sessions and turns Stripe events into grants.
 type Service struct {
-        store data.Store
-        gw    Gateway
-        urls  URLs
+        store  data.Store
+        gw     Gateway
+        limits Limits
+        urls   URLs
 }
 
 // New returns a Service.
-func New(store data.Store, gw Gateway, urls URLs) *Service <span class="cov10" title="24">{
-        return &amp;Service{store: store, gw: gw, urls: urls}
+func New(store data.Store, gw Gateway, limits Limits, urls URLs) *Service <span class="cov10" title="38">{
+        return &amp;Service{store: store, gw: gw, limits: limits, urls: urls}
 }</span>
 
-// Checkout returns a Stripe-hosted checkout URL for a tier, tied to userID. A tier with no
-// Stripe price ID, or one that does not exist, is rejected as invalid. email may be empty.
-func (s *Service) Checkout(ctx context.Context, userID, email, tierID string) (string, error) <span class="cov4" title="4">{
+// CheckoutRequest names what to buy: exactly one of TierID or ProductID. Quantity applies to
+// products and defaults to 1.
+type CheckoutRequest struct {
+        TierID    string
+        ProductID string
+        Quantity  int64
+}
+
+// Checkout returns a Stripe-hosted checkout URL tied to userID. Anything not purchasable (no
+// such tier or product, no Stripe price, a quantity the product does not allow) is rejected as
+// invalid; a product the user already holds and cannot repeat, or one that would pass a key's
+// maximum, is refused before any Stripe session is created. email may be empty.
+func (s *Service) Checkout(ctx context.Context, userID, email string, req CheckoutRequest) (string, error) <span class="cov8" title="19">{
+        if (req.TierID == "") == (req.ProductID == "") </span><span class="cov2" title="2">{
+                return "", fmt.Errorf("%w: provide either tier_id or product_id", models.ErrInvalid)
+        }</span>
+        <span class="cov8" title="17">params := CheckoutParams{UserID: userID, Email: email, SuccessURL: s.urls.CheckoutSuccess, CancelURL: s.urls.CheckoutCancel}
+        var err error
+        if req.TierID != "" </span><span class="cov4" title="4">{
+                err = s.tierParams(ctx, req.TierID, &amp;params)
+        }</span> else<span class="cov7" title="13"> {
+                err = s.productParams(ctx, userID, req, &amp;params)
+        }</span>
+        <span class="cov8" title="17">if err != nil </span><span class="cov6" title="10">{
+                return "", err
+        }</span>
+        <span class="cov5" title="7">if params.CustomerID, err = s.store.StripeCustomer(ctx, userID); err != nil </span><span class="cov0" title="0">{
+                return "", err
+        }</span>
+        <span class="cov5" title="7">return s.gw.CreateCheckout(ctx, params)</span>
+}
+
+func (s *Service) tierParams(ctx context.Context, tierID string, p *CheckoutParams) error <span class="cov4" title="4">{
         tiers, err := s.store.GetTiers(ctx, []string{tierID})
         if err != nil </span><span class="cov0" title="0">{
-                return "", err
+                return err
         }</span>
         <span class="cov4" title="4">if len(tiers) == 0 || tiers[0].StripePriceID == "" </span><span class="cov2" title="2">{
-                return "", fmt.Errorf("%w: tier is not available for purchase", models.ErrInvalid)
+                return fmt.Errorf("%w: tier is not available for purchase", models.ErrInvalid)
         }</span>
-        <span class="cov2" title="2">customer, err := s.store.StripeCustomer(ctx, userID)
+        <span class="cov2" title="2">p.PriceID, p.TierID = tiers[0].StripePriceID, tierID
+        return nil</span>
+}
+
+func (s *Service) productParams(ctx context.Context, userID string, req CheckoutRequest, p *CheckoutParams) error <span class="cov7" title="13">{
+        qty := req.Quantity
+        if qty == 0 </span><span class="cov5" title="6">{
+                qty = 1
+        }</span>
+        <span class="cov7" title="13">if qty &lt; 1 || qty &gt; constants.MaxPurchaseQuantity </span><span class="cov2" title="2">{
+                return fmt.Errorf("%w: quantity must be between 1 and %d", models.ErrInvalid, constants.MaxPurchaseQuantity)
+        }</span>
+        <span class="cov6" title="11">products, err := s.store.GetProducts(ctx, []string{req.ProductID})
         if err != nil </span><span class="cov0" title="0">{
-                return "", err
+                return err
         }</span>
-        <span class="cov2" title="2">return s.gw.CreateCheckout(ctx, CheckoutParams{
-                PriceID: tiers[0].StripePriceID, UserID: userID, TierID: tierID, Email: email, CustomerID: customer,
-                SuccessURL: s.urls.CheckoutSuccess, CancelURL: s.urls.CheckoutCancel,
-        })</span>
+        <span class="cov6" title="11">if len(products) == 0 || products[0].StripePriceID == "" </span><span class="cov2" title="2">{
+                return fmt.Errorf("%w: product is not available for purchase", models.ErrInvalid)
+        }</span>
+        <span class="cov6" title="9">prod := products[0]
+        if !prod.Repeatable </span><span class="cov4" title="4">{
+                if qty != 1 </span><span class="cov1" title="1">{
+                        return fmt.Errorf("%w: this product cannot be bought with a quantity", models.ErrInvalid)
+                }</span>
+                <span class="cov3" title="3">if err := s.checkNotHeld(ctx, userID, prod.Slug); err != nil </span><span class="cov1" title="1">{
+                        return err
+                }</span>
+        }
+        <span class="cov5" title="7">adds := make([]catalog.Units, 0, len(prod.Entitlements))
+        for _, e := range prod.Entitlements </span><span class="cov6" title="11">{
+                if e.Type == models.TypeLimit </span><span class="cov5" title="7">{
+                        adds = append(adds, catalog.Units{Key: e.Key, Units: e.Value * qty})
+                }</span>
+        }
+        <span class="cov5" title="7">if err := s.limits.CheckPurchase(ctx, userID, adds); err != nil </span><span class="cov2" title="2">{
+                return err
+        }</span>
+        <span class="cov4" title="5">p.PriceID, p.ProductID, p.Quantity = prod.StripePriceID, prod.Slug, qty
+        return nil</span>
+}
+
+// checkNotHeld refuses a second purchase of a non-repeatable product.
+func (s *Service) checkNotHeld(ctx context.Context, userID, productID string) error <span class="cov3" title="3">{
+        grants, err := s.store.ActiveGrants(ctx, userID, time.Now())
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov3" title="3">for _, g := range grants </span><span class="cov1" title="1">{
+                if g.ProductID == productID </span><span class="cov1" title="1">{
+                        return fmt.Errorf("%w: product already purchased", catalog.ErrInUse)
+                }</span>
+        }
+        <span class="cov2" title="2">return nil</span>
 }
 
 // Portal returns a billing-portal URL for the user's Stripe customer, or data.ErrNotFound when
@@ -365,10 +486,11 @@ import (
         "encoding/json"
         "errors"
         "slices"
+        "strconv"
         "time"
 
         "github.com/sweetrpg/common.go/logging"
-        "github.com/sweetrpg/entitlements-api/data"
+        "github.com/sweetrpg/entitlements-api/catalog"
         "github.com/sweetrpg/entitlements-api/models"
 )
 
@@ -383,24 +505,24 @@ type Event struct {
 // over: an event ID already recorded is skipped, and every handler converges on the same grant
 // state when replayed (the ID is recorded only after the handler succeeds, so a failed event is
 // retried). Event types the service does not act on are ignored without being recorded.
-func (s *Service) HandleEvent(ctx context.Context, ev Event) error <span class="cov10" title="41">{
+func (s *Service) HandleEvent(ctx context.Context, ev Event) error <span class="cov9" title="58">{
         handle, ok := s.handlers()[ev.Type]
         if !ok </span><span class="cov1" title="1">{
                 return nil
         }</span>
-        <span class="cov9" title="40">done, err := s.store.EventProcessed(ctx, ev.ID)
+        <span class="cov9" title="57">done, err := s.store.EventProcessed(ctx, ev.ID)
         if err != nil || done </span><span class="cov2" title="2">{
                 return err
         }</span>
-        <span class="cov9" title="38">if err := handle(ctx, ev.Object); err != nil </span><span class="cov1" title="1">{
+        <span class="cov9" title="55">if err := handle(ctx, ev.Object); err != nil </span><span class="cov1" title="1">{
                 return err
         }</span>
-        <span class="cov9" title="37">return s.store.RecordEvent(ctx, ev.ID, ev.Type, time.Now().UTC())</span>
+        <span class="cov9" title="54">return s.store.RecordEvent(ctx, ev.ID, ev.Type, time.Now().UTC())</span>
 }
 
 type handlerFunc func(ctx context.Context, object json.RawMessage) error
 
-func (s *Service) handlers() map[string]handlerFunc <span class="cov10" title="41">{
+func (s *Service) handlers() map[string]handlerFunc <span class="cov9" title="58">{
         return map[string]handlerFunc{
                 "checkout.session.completed":               s.onCheckout,
                 "checkout.session.async_payment_succeeded": s.onCheckout,
@@ -412,95 +534,112 @@ func (s *Service) handlers() map[string]handlerFunc <span class="cov10" title="4
         }
 }</span>
 
-func (s *Service) onCheckout(ctx context.Context, raw json.RawMessage) error <span class="cov8" title="18">{
+// purchase is what a Stripe event says a user bought: one Stripe object (the subscription or the
+// payment intent) that becomes one grant per entitlement of a product, or one tier grant.
+type purchase struct {
+        source     string
+        externalID string
+        userID     string
+        tierID     string
+        productID  string
+        quantity   int64
+        validUntil *time.Time
+        refs       []string
+}
+
+func (s *Service) onCheckout(ctx context.Context, raw json.RawMessage) error <span class="cov7" title="28">{
         var cs checkoutSession
         if err := json.Unmarshal(raw, &amp;cs); err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov8" title="18">if cs.PaymentStatus != "paid" &amp;&amp; cs.PaymentStatus != "no_payment_required" </span><span class="cov1" title="1">{
+        <span class="cov7" title="28">if cs.PaymentStatus != "paid" &amp;&amp; cs.PaymentStatus != "no_payment_required" </span><span class="cov1" title="1">{
                 return nil // async payment pending; async_payment_succeeded follows
         }</span>
-        <span class="cov7" title="17">user := cs.Metadata["user_id"]
+        <span class="cov7" title="27">user := cs.Metadata["user_id"]
         if user == "" </span><span class="cov1" title="1">{
                 user = cs.ClientReferenceID
         }</span>
-        <span class="cov7" title="17">if user == "" </span><span class="cov1" title="1">{
+        <span class="cov7" title="27">if user == "" </span><span class="cov1" title="1">{
                 logging.Logger.Warn("stripe checkout session has no user, ignoring", "session", cs.ID)
                 return nil
         }</span>
-        <span class="cov7" title="16">if cs.Customer != "" </span><span class="cov7" title="16">{
+        <span class="cov7" title="26">if cs.Customer != "" </span><span class="cov7" title="25">{
                 if err := s.store.SaveStripeCustomer(ctx, user, cs.Customer, systemActor); err != nil </span><span class="cov0" title="0">{
                         return err
                 }</span>
         }
-        <span class="cov7" title="16">g := models.Grant{UserID: user, TierID: cs.Metadata["tier_id"], Refs: []string{cs.ID}}
+        <span class="cov7" title="26">qty, _ := strconv.ParseInt(cs.Metadata["quantity"], 10, 64)
+        p := purchase{
+                userID: user, tierID: cs.Metadata["tier_id"], productID: cs.Metadata["product_id"],
+                quantity: max(qty, 1), refs: nonEmpty(cs.ID),
+        }
         switch cs.Mode </span>{
-        case "subscription":<span class="cov6" title="9">
-                g.Source, g.ExternalID = models.SourceStripeSubscription, cs.Subscription</span>
-        case "payment":<span class="cov5" title="7">
-                g.Source, g.ExternalID = models.SourceStripePurchase, cs.PaymentIntent</span>
+        case "subscription":<span class="cov6" title="14">
+                p.source, p.externalID = models.SourceStripeSubscription, cs.Subscription</span>
+        case "payment":<span class="cov6" title="12">
+                p.source, p.externalID = models.SourceStripePurchase, cs.PaymentIntent</span>
         default:<span class="cov0" title="0">
                 return nil</span>
         }
-        <span class="cov7" title="16">if g.ExternalID == "" </span><span class="cov0" title="0">{
+        <span class="cov7" title="26">if p.externalID == "" </span><span class="cov0" title="0">{
                 return nil
         }</span>
-        <span class="cov7" title="16">return s.upsertGrant(ctx, g)</span>
+        <span class="cov7" title="26">return s.applyPurchase(ctx, p)</span>
 }
 
-func (s *Service) onInvoicePaid(ctx context.Context, raw json.RawMessage) error <span class="cov6" title="11">{
+func (s *Service) onInvoicePaid(ctx context.Context, raw json.RawMessage) error <span class="cov6" title="13">{
         var inv invoice
         if err := json.Unmarshal(raw, &amp;inv); err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov6" title="11">sub, meta := inv.details()
+        <span class="cov6" title="13">sub, meta := inv.details()
         if sub == "" </span><span class="cov1" title="1">{
                 return nil // not a subscription invoice
         }</span>
-        <span class="cov6" title="10">g := models.Grant{
-                Source: models.SourceStripeSubscription, ExternalID: sub,
-                UserID: meta["user_id"], TierID: meta["tier_id"],
-                Refs: nonEmpty(inv.ID, inv.PaymentIntent, inv.Charge),
+        <span class="cov6" title="12">p := purchase{
+                source: models.SourceStripeSubscription, externalID: sub,
+                userID: meta["user_id"], tierID: meta["tier_id"], productID: meta["product_id"],
+                quantity: inv.quantity(), refs: nonEmpty(inv.ID, inv.PaymentIntent, inv.Charge),
         }
-        if end := inv.periodEnd(); end &gt; 0 </span><span class="cov6" title="10">{
+        if end := inv.periodEnd(); end &gt; 0 </span><span class="cov6" title="12">{
                 t := time.Unix(end, 0).UTC()
-                g.ValidUntil = &amp;t
+                p.validUntil = &amp;t
         }</span>
-        <span class="cov6" title="10">return s.upsertGrant(ctx, g)</span>
+        <span class="cov6" title="12">return s.applyPurchase(ctx, p)</span>
 }
 
-// onSubscriptionUpdated ends the grant when Stripe gives up on a subscription. past_due is
-// left active: Stripe is still retrying the payment.
-func (s *Service) onSubscriptionUpdated(ctx context.Context, raw json.RawMessage) error <span class="cov2" title="2">{
+// onSubscriptionUpdated ends the grants when Stripe gives up on a subscription, and follows a
+// quantity change. past_due is left active: Stripe is still retrying the payment.
+func (s *Service) onSubscriptionUpdated(ctx context.Context, raw json.RawMessage) error <span class="cov3" title="4">{
         var sub subscription
         if err := json.Unmarshal(raw, &amp;sub); err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov2" title="2">switch sub.Status </span>{
+        <span class="cov3" title="4">switch sub.Status </span>{
         case "unpaid", "canceled", "incomplete_expired":<span class="cov1" title="1">
-                return s.endGrant(ctx, models.SourceStripeSubscription, sub.ID)</span>
+                return s.endGrants(ctx, models.SourceStripeSubscription, sub.ID)</span>
         }
-        <span class="cov1" title="1">return nil</span>
+        <span class="cov3" title="3">return s.applyQuantity(ctx, sub)</span>
 }
 
-func (s *Service) onSubscriptionDeleted(ctx context.Context, raw json.RawMessage) error <span class="cov3" title="3">{
+func (s *Service) onSubscriptionDeleted(ctx context.Context, raw json.RawMessage) error <span class="cov3" title="4">{
         var sub subscription
         if err := json.Unmarshal(raw, &amp;sub); err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov3" title="3">return s.endGrant(ctx, models.SourceStripeSubscription, sub.ID)</span>
+        <span class="cov3" title="4">return s.endGrants(ctx, models.SourceStripeSubscription, sub.ID)</span>
 }
 
-// onChargeRefunded revokes only on a full refund; a partial refund leaves the grant alone.
-func (s *Service) onChargeRefunded(ctx context.Context, raw json.RawMessage) error <span class="cov3" title="3">{
+// onChargeRefunded revokes only on a full refund; a partial refund leaves the grants alone.
+func (s *Service) onChargeRefunded(ctx context.Context, raw json.RawMessage) error <span class="cov4" title="5">{
         var ch charge
         if err := json.Unmarshal(raw, &amp;ch); err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov3" title="3">if !ch.Refunded </span><span class="cov1" title="1">{
+        <span class="cov4" title="5">if !ch.Refunded </span><span class="cov1" title="1">{
                 return nil
         }</span>
-        <span class="cov2" title="2">return s.revoke(ctx, ch.ID, ch.PaymentIntent, ch.Invoice)</span>
+        <span class="cov3" title="4">return s.revoke(ctx, ch.ID, ch.PaymentIntent, ch.Invoice)</span>
 }
 
 func (s *Service) onDispute(ctx context.Context, raw json.RawMessage) error <span class="cov1" title="1">{
@@ -511,73 +650,180 @@ func (s *Service) onDispute(ctx context.Context, raw json.RawMessage) error <spa
         <span class="cov1" title="1">return s.revoke(ctx, d.Charge, d.PaymentIntent)</span>
 }
 
-// upsertGrant creates the grant for (source, external id) or folds in a later event: it
-// reactivates an ended grant, only ever extends valid_until, and unions refs. A revoked grant
-// is never touched. An event that would create a grant without knowing the user is ignored.
-func (s *Service) upsertGrant(ctx context.Context, in models.Grant) error <span class="cov8" title="26">{
-        cur, err := s.store.GrantByExternal(ctx, in.Source, in.ExternalID)
-        if errors.Is(err, data.ErrNotFound) </span><span class="cov8" title="18">{
-                if in.UserID == "" </span><span class="cov0" title="0">{
-                        logging.Logger.Warn("stripe event cannot create a grant without a user", "external_id", in.ExternalID)
-                        return nil
-                }</span>
-                <span class="cov8" title="18">in.Status = models.GrantActive
-                return s.store.InsertGrant(ctx, &amp;in, systemActor)</span>
+// wanted expands a purchase into the grants it should have: one key-level grant per entitlement
+// of a product (value x quantity; a flag is simply on), or a single tier grant. A product that
+// no longer exists yields none.
+func (s *Service) wanted(ctx context.Context, p purchase) ([]models.Grant, error) <span class="cov8" title="38">{
+        base := models.Grant{
+                UserID: p.userID, Source: p.source, ExternalID: p.externalID,
+                ValidUntil: p.validUntil, Refs: p.refs, Status: models.GrantActive,
         }
-        <span class="cov6" title="8">if err != nil || cur.Status == models.GrantRevoked </span><span class="cov1" title="1">{
+        switch </span>{
+        case p.productID != "":<span class="cov6" title="12">
+                products, err := s.store.GetProducts(ctx, []string{p.productID})
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov6" title="12">if len(products) == 0 </span><span class="cov1" title="1">{
+                        logging.Logger.Warn("stripe event names a product that is not in the catalog", "product", p.productID, "external_id", p.externalID)
+                        return nil, nil
+                }</span>
+                <span class="cov5" title="11">out := make([]models.Grant, 0, len(products[0].Entitlements))
+                for _, e := range products[0].Entitlements </span><span class="cov6" title="17">{
+                        g := base
+                        g.Key, g.Value, g.ProductID, g.Quantity = e.Key, grantValue(e, p.quantity), p.productID, p.quantity
+                        out = append(out, g)
+                }</span>
+                <span class="cov5" title="11">return out, nil</span>
+        case p.tierID != "":<span class="cov7" title="26">
+                g := base
+                g.TierID = p.tierID
+                return []models.Grant{g}, nil</span>
+        }
+        <span class="cov0" title="0">return nil, nil</span>
+}
+
+func grantValue(e models.ProductEntitlement, quantity int64) int64 <span class="cov7" title="18">{
+        if e.Type == models.TypeFlag </span><span class="cov4" title="6">{
+                return 1
+        }</span>
+        <span class="cov6" title="12">return e.Value * quantity</span>
+}
+
+// applyPurchase creates the grants a purchase should have and folds a later event into the ones
+// that exist: it reactivates an ended grant, only ever extends valid_until, and unions refs. A
+// revoked grant is never touched. Existing grants are updated even when the event carries no
+// product or tier (a renewal invoice), and an event that would create grants without knowing
+// the user is ignored.
+func (s *Service) applyPurchase(ctx context.Context, p purchase) error <span class="cov8" title="38">{
+        existing, err := s.store.GrantsByExternal(ctx, p.source, p.externalID)
+        if err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov5" title="7">cur.Status = models.GrantActive
-        if in.UserID != "" </span><span class="cov5" title="7">{
-                cur.UserID = in.UserID
+        <span class="cov8" title="38">want, err := s.wanted(ctx, p)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
         }</span>
-        <span class="cov5" title="7">if in.TierID != "" </span><span class="cov5" title="7">{
-                cur.TierID = in.TierID
+        <span class="cov8" title="38">for i := range existing </span><span class="cov5" title="9">{
+                if err := s.mergeGrant(ctx, &amp;existing[i], p); err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+        }
+        <span class="cov8" title="38">for _, g := range want </span><span class="cov8" title="43">{
+                if slices.ContainsFunc(existing, func(e models.Grant) bool </span><span class="cov5" title="9">{ return e.Key == g.Key &amp;&amp; e.TierID == g.TierID }</span>) <span class="cov5" title="9">{
+                        continue</span>
+                }
+                <span class="cov8" title="34">if g.UserID == "" </span><span class="cov0" title="0">{
+                        logging.Logger.Warn("stripe event cannot create a grant without a user", "external_id", p.externalID)
+                        return nil
+                }</span>
+                <span class="cov8" title="34">if err := s.store.InsertGrant(ctx, &amp;g, systemActor); err != nil </span><span class="cov1" title="1">{
+                        return err
+                }</span>
+        }
+        <span class="cov8" title="37">return nil</span>
+}
+
+func (s *Service) mergeGrant(ctx context.Context, cur *models.Grant, p purchase) error <span class="cov5" title="9">{
+        if cur.Status == models.GrantRevoked </span><span class="cov1" title="1">{
+                return nil
         }</span>
-        <span class="cov5" title="7">if in.ValidUntil != nil &amp;&amp; (cur.ValidUntil == nil || in.ValidUntil.After(*cur.ValidUntil)) </span><span class="cov5" title="6">{
-                cur.ValidUntil = in.ValidUntil
+        <span class="cov5" title="8">cur.Status = models.GrantActive
+        if p.userID != "" </span><span class="cov5" title="8">{
+                cur.UserID = p.userID
         }</span>
-        <span class="cov5" title="7">for _, r := range in.Refs </span><span class="cov7" title="15">{
-                if !slices.Contains(cur.Refs, r) </span><span class="cov7" title="15">{
+        <span class="cov5" title="8">if p.validUntil != nil &amp;&amp; (cur.ValidUntil == nil || p.validUntil.After(*cur.ValidUntil)) </span><span class="cov5" title="7">{
+                cur.ValidUntil = p.validUntil
+        }</span>
+        <span class="cov5" title="8">for _, r := range p.refs </span><span class="cov6" title="16">{
+                if !slices.Contains(cur.Refs, r) </span><span class="cov6" title="16">{
                         cur.Refs = append(cur.Refs, r)
                 }</span>
         }
-        <span class="cov5" title="7">return s.store.UpdateGrant(ctx, cur, systemActor)</span>
+        <span class="cov5" title="8">return s.store.UpdateGrant(ctx, cur, systemActor)</span>
 }
 
-func (s *Service) endGrant(ctx context.Context, source, externalID string) error <span class="cov4" title="4">{
-        g, err := s.store.GrantByExternal(ctx, source, externalID)
-        if errors.Is(err, data.ErrNotFound) </span><span class="cov0" title="0">{
+// applyQuantity follows a subscription quantity change: each of the subscription's grants takes
+// its entitlement's value x the new quantity. Stripe has already accepted the change, so a result
+// above a key's maximum cannot be refused here; it is logged and checks clamp it.
+func (s *Service) applyQuantity(ctx context.Context, sub subscription) error <span class="cov3" title="3">{
+        productID, qty := sub.Metadata["product_id"], sub.quantity()
+        if productID == "" || qty &lt; 1 </span><span class="cov1" title="1">{
                 return nil
         }</span>
-        <span class="cov4" title="4">if err != nil || g.Status != models.GrantActive </span><span class="cov1" title="1">{
+        <span class="cov2" title="2">products, err := s.store.GetProducts(ctx, []string{productID})
+        if err != nil || len(products) == 0 </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov3" title="3">g.Status = models.GrantEnded
-        return s.store.UpdateGrant(ctx, g, systemActor)</span>
+        <span class="cov2" title="2">grants, err := s.store.GrantsByExternal(ctx, models.SourceStripeSubscription, sub.ID)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov2" title="2">for _, e := range products[0].Entitlements </span><span class="cov2" title="2">{
+                for i := range grants </span><span class="cov2" title="2">{
+                        g := &amp;grants[i]
+                        if g.Key != e.Key || g.Status == models.GrantRevoked || (g.Quantity == qty &amp;&amp; g.Value == grantValue(e, qty)) </span><span class="cov1" title="1">{
+                                continue</span>
+                        }
+                        <span class="cov1" title="1">g.Value, g.Quantity = grantValue(e, qty), qty
+                        if err := s.store.UpdateGrant(ctx, g, systemActor); err != nil </span><span class="cov0" title="0">{
+                                return err
+                        }</span>
+                        <span class="cov1" title="1">s.warnIfOverMaximum(ctx, g)</span>
+                }
+        }
+        <span class="cov2" title="2">return nil</span>
 }
 
-func (s *Service) revoke(ctx context.Context, refs ...string) error <span class="cov3" title="3">{
-        for _, ref := range nonEmpty(refs...) </span><span class="cov5" title="7">{
+// warnIfOverMaximum probes whether the user now holds more than the key's maximum.
+func (s *Service) warnIfOverMaximum(ctx context.Context, g *models.Grant) <span class="cov1" title="1">{
+        var exceeded catalog.MaxExceededError
+        if err := s.limits.CheckPurchase(ctx, g.UserID, []catalog.Units{{Key: g.Key}}); errors.As(err, &amp;exceeded) </span><span class="cov1" title="1">{
+                logging.Logger.Warn("subscription quantity change passes the key maximum; checks clamp it",
+                        "user", g.UserID, "key", g.Key, "external_id", g.ExternalID)
+        }</span>
+}
+
+// endGrants ends every active grant of one Stripe object together.
+func (s *Service) endGrants(ctx context.Context, source, externalID string) error <span class="cov4" title="5">{
+        grants, err := s.store.GrantsByExternal(ctx, source, externalID)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov4" title="5">for i := range grants </span><span class="cov4" title="5">{
+                if grants[i].Status != models.GrantActive </span><span class="cov1" title="1">{
+                        continue</span>
+                }
+                <span class="cov3" title="4">grants[i].Status = models.GrantEnded
+                if err := s.store.UpdateGrant(ctx, &amp;grants[i], systemActor); err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+        }
+        <span class="cov4" title="5">return nil</span>
+}
+
+// revoke revokes every grant that names one of the Stripe objects, so a bundle goes together.
+func (s *Service) revoke(ctx context.Context, refs ...string) error <span class="cov4" title="5">{
+        for _, ref := range nonEmpty(refs...) </span><span class="cov5" title="11">{
                 grants, err := s.store.GrantsByRef(ctx, ref)
                 if err != nil </span><span class="cov0" title="0">{
                         return err
                 }</span>
-                <span class="cov5" title="7">for i := range grants </span><span class="cov4" title="5">{
+                <span class="cov5" title="11">for i := range grants </span><span class="cov5" title="11">{
                         if grants[i].Status == models.GrantRevoked </span><span class="cov2" title="2">{
                                 continue</span>
                         }
-                        <span class="cov3" title="3">grants[i].Status = models.GrantRevoked
+                        <span class="cov5" title="9">grants[i].Status = models.GrantRevoked
                         if err := s.store.UpdateGrant(ctx, &amp;grants[i], systemActor); err != nil </span><span class="cov0" title="0">{
                                 return err
                         }</span>
                 }
         }
-        <span class="cov3" title="3">return nil</span>
+        <span class="cov4" title="5">return nil</span>
 }
 
-func nonEmpty(vals ...string) []string <span class="cov7" title="13">{
-        return slices.DeleteFunc(slices.Clone(vals), func(v string) bool </span><span class="cov9" title="38">{ return v == "" }</span>)
+func nonEmpty(vals ...string) []string <span class="cov8" title="43">{
+        return slices.DeleteFunc(slices.Clone(vals), func(v string) bool </span><span class="cov10" title="76">{ return v == "" }</span>)
 }
 </pre>
 		
@@ -738,6 +984,116 @@ func dedupe(in []string) []string <span class="cov9" title="27">{
 import (
         "context"
         "fmt"
+        "slices"
+        "strings"
+
+        "github.com/sweetrpg/entitlements-api/models"
+)
+
+// ProductInput is the writable part of a product. Entitlements maps key name to a JSON bool or
+// number: the value granted per unit purchased.
+type ProductInput struct {
+        Slug          string
+        Name          string
+        Description   string
+        Billing       string
+        Repeatable    bool
+        StripePriceID string
+        Entitlements  map[string]any
+}
+
+// buildEntitlements validates every key exists and the value matches its type. A limit
+// entitlement must add at least one unit; a flag entitlement must be true.
+func (s *Service) buildEntitlements(ctx context.Context, raw map[string]any) ([]models.ProductEntitlement, error) <span class="cov9" title="10">{
+        if len(raw) == 0 </span><span class="cov1" title="1">{
+                return nil, fmt.Errorf("%w: a product needs at least one entitlement", models.ErrInvalid)
+        }</span>
+        <span class="cov8" title="9">values, err := s.buildValues(ctx, raw)
+        if err != nil </span><span class="cov3" title="2">{
+                return nil, err
+        }</span>
+        <span class="cov7" title="7">out := make([]models.ProductEntitlement, len(values))
+        for i, v := range values </span><span class="cov9" title="12">{
+                if v.Value &lt; 1 </span><span class="cov3" title="2">{
+                        return nil, fmt.Errorf("%w: entitlement %q must grant at least 1", models.ErrInvalid, v.Key)
+                }</span>
+                <span class="cov9" title="10">out[i] = models.ProductEntitlement(v)</span>
+        }
+        <span class="cov6" title="5">return out, nil</span>
+}
+
+func (s *Service) productFromInput(ctx context.Context, in ProductInput) (*models.Product, error) <span class="cov10" title="13">{
+        if err := models.ValidateProductSlug(in.Slug); err != nil </span><span class="cov1" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov9" title="12">if strings.TrimSpace(in.Name) == "" </span><span class="cov1" title="1">{
+                return nil, fmt.Errorf("%w: name is required", models.ErrInvalid)
+        }</span>
+        <span class="cov9" title="11">if !slices.Contains([]string{models.BillingOneOff, models.BillingRecurring}, in.Billing) </span><span class="cov1" title="1">{
+                return nil, fmt.Errorf("%w: billing must be one_off or recurring", models.ErrInvalid)
+        }</span>
+        <span class="cov9" title="10">ents, err := s.buildEntitlements(ctx, in.Entitlements)
+        if err != nil </span><span class="cov6" title="5">{
+                return nil, err
+        }</span>
+        <span class="cov6" title="5">return &amp;models.Product{
+                Slug: in.Slug, Name: in.Name, Description: in.Description, Billing: in.Billing,
+                Repeatable: in.Repeatable, StripePriceID: in.StripePriceID, Entitlements: ents,
+        }, nil</span>
+}
+
+// CreateProduct adds a product. It can be purchased as soon as it has a Stripe price ID.
+func (s *Service) CreateProduct(ctx context.Context, actor string, in ProductInput) (*models.Product, error) <span class="cov9" title="11">{
+        p, err := s.productFromInput(ctx, in)
+        if err != nil </span><span class="cov8" title="8">{
+                return nil, err
+        }</span>
+        <span class="cov4" title="3">if err := s.store.InsertProduct(ctx, p, actor); err != nil </span><span class="cov1" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov3" title="2">return p, s.audit(ctx, actor, "create", "product", p.Slug, nil, p)</span>
+}
+
+// UpdateProduct replaces a product's fields. Grants already issued keep the values they were
+// created with, except subscription quantity changes, which recompute from the current product.
+func (s *Service) UpdateProduct(ctx context.Context, actor string, in ProductInput) (*models.Product, error) <span class="cov3" title="2">{
+        p, err := s.productFromInput(ctx, in)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov3" title="2">before, err := s.store.GetProducts(ctx, []string{in.Slug})
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov3" title="2">if len(before) == 0 </span><span class="cov1" title="1">{
+                return nil, ErrNotFound
+        }</span>
+        <span class="cov1" title="1">updated, err := s.store.UpdateProduct(ctx, p, actor)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov1" title="1">return updated, s.audit(ctx, actor, "update", "product", in.Slug, before[0], updated)</span>
+}
+
+// DeleteProduct removes a product from the catalog. Existing grants are unaffected.
+func (s *Service) DeleteProduct(ctx context.Context, actor, slug string) error <span class="cov3" title="2">{
+        if err := s.store.DeleteProduct(ctx, slug, actor); err != nil </span><span class="cov1" title="1">{
+                return err
+        }</span>
+        <span class="cov1" title="1">return s.audit(ctx, actor, "delete", "product", slug, nil, nil)</span>
+}
+
+// ListProducts returns live products ordered by id.
+func (s *Service) ListProducts(ctx context.Context, limit, skip int64) ([]models.Product, error) <span class="cov1" title="1">{
+        return s.store.ListProducts(ctx, limit, skip)
+}</span>
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">package catalog
+
+import (
+        "context"
+        "fmt"
 
         "github.com/sweetrpg/entitlements-api/models"
 )
@@ -794,7 +1150,7 @@ func (s *Service) CheckPurchase(ctx context.Context, userID string, adds []Units
 }
 </pre>
 		
-		<pre class="file" id="file6" style="display: none">package catalog
+		<pre class="file" id="file7" style="display: none">package catalog
 
 import (
         "time"
@@ -855,7 +1211,7 @@ func Resolve(def *models.Tier, tiers map[string]models.Tier, grants []models.Gra
 }
 </pre>
 		
-		<pre class="file" id="file7" style="display: none">// Package catalog holds the entitlements business rules: admin-only catalog writes with an audit
+		<pre class="file" id="file8" style="display: none">// Package catalog holds the entitlements business rules: admin-only catalog writes with an audit
 // trail, and effective-value resolution for checks.
 package catalog
 
@@ -888,7 +1244,7 @@ type Service struct {
 }
 
 // New returns a Service over store.
-func New(store data.Store) *Service <span class="cov7" title="29">{ return &amp;Service{store: store, now: time.Now} }</span>
+func New(store data.Store) *Service <span class="cov7" title="32">{ return &amp;Service{store: store, now: time.Now} }</span>
 
 // KeyInput is the writable part of a key.
 type KeyInput struct {
@@ -909,46 +1265,46 @@ type TierInput struct {
         StripePriceID string
 }
 
-func validateTTL(ttl int) error <span class="cov8" title="60">{
+func validateTTL(ttl int) error <span class="cov8" title="66">{
         if ttl &lt; 0 || ttl &gt; constants.MaxTTLSeconds </span><span class="cov3" title="3">{
                 return fmt.Errorf("%w: ttl_seconds must be between 0 and %d", models.ErrInvalid, constants.MaxTTLSeconds)
         }</span>
-        <span class="cov8" title="57">return nil</span>
+        <span class="cov8" title="63">return nil</span>
 }
 
 // audit appends the trail entry after a successful write. The write and the entry are not one
 // transaction: if the append fails the change is already persisted, so the failure is logged at
 // ERROR and the write still reports success. Upgrade path: wrap both in a Mongo transaction if
 // lost entries ever matter.
-func (s *Service) audit(ctx context.Context, actor, action, kind, subject string, before, after any) error <span class="cov10" title="119">{
+func (s *Service) audit(ctx context.Context, actor, action, kind, subject string, before, after any) error <span class="cov10" title="138">{
         err := s.store.AppendAudit(ctx, models.AuditEntry{
                 At: s.now().UTC(), Actor: actor, Action: action, Kind: kind, Subject: subject, Before: before, After: after,
         })
         if err != nil </span><span class="cov1" title="1">{
                 logging.Logger.Error("catalog audit entry not recorded", "action", action, "kind", kind, "subject", subject, "actor", actor, "error", err.Error())
         }</span>
-        <span class="cov10" title="119">return nil</span>
+        <span class="cov10" title="138">return nil</span>
 }
 
 // CreateKey registers a key. A live key with the same name is rejected.
-func (s *Service) CreateKey(ctx context.Context, actor string, in KeyInput) (*models.Key, error) <span class="cov8" title="55">{
+func (s *Service) CreateKey(ctx context.Context, actor string, in KeyInput) (*models.Key, error) <span class="cov8" title="61">{
         if err := models.ValidateKeyName(in.Key); err != nil </span><span class="cov1" title="1">{
                 return nil, err
         }</span>
-        <span class="cov8" title="54">if in.Type != models.TypeFlag &amp;&amp; in.Type != models.TypeLimit </span><span class="cov1" title="1">{
+        <span class="cov8" title="60">if in.Type != models.TypeFlag &amp;&amp; in.Type != models.TypeLimit </span><span class="cov1" title="1">{
                 return nil, fmt.Errorf("%w: type must be flag or limit", models.ErrInvalid)
         }</span>
-        <span class="cov8" title="53">if err := validateTTL(in.TTLSeconds); err != nil </span><span class="cov2" title="2">{
+        <span class="cov8" title="59">if err := validateTTL(in.TTLSeconds); err != nil </span><span class="cov2" title="2">{
                 return nil, err
         }</span>
-        <span class="cov8" title="51">if err := models.ValidateMax(in.Type, in.Max); err != nil </span><span class="cov3" title="4">{
+        <span class="cov8" title="57">if err := models.ValidateMax(in.Type, in.Max); err != nil </span><span class="cov3" title="4">{
                 return nil, err
         }</span>
-        <span class="cov8" title="47">k := &amp;models.Key{Key: in.Key, Type: in.Type, Description: in.Description, TTLSeconds: in.TTLSeconds, Max: in.Max}
+        <span class="cov8" title="53">k := &amp;models.Key{Key: in.Key, Type: in.Type, Description: in.Description, TTLSeconds: in.TTLSeconds, Max: in.Max}
         if err := s.store.InsertKey(ctx, k, actor); err != nil </span><span class="cov1" title="1">{
                 return nil, err
         }</span>
-        <span class="cov8" title="46">return k, s.audit(ctx, actor, "create", "key", k.Key, nil, k)</span>
+        <span class="cov8" title="52">return k, s.audit(ctx, actor, "create", "key", k.Key, nil, k)</span>
 }
 
 // UpdateKey changes a key's description, TTL, and maximum (nil removes the maximum). Its type
@@ -964,7 +1320,7 @@ func (s *Service) UpdateKey(ctx context.Context, actor, name, description string
         <span class="cov4" title="6">if len(before) == 0 </span><span class="cov1" title="1">{
                 return nil, ErrNotFound
         }</span>
-        <span class="cov4" title="5">if err := models.ValidateMax(before[0].Type, max); err != nil </span><span class="cov1" title="1">{
+        <span class="cov3" title="5">if err := models.ValidateMax(before[0].Type, max); err != nil </span><span class="cov1" title="1">{
                 return nil, err
         }</span>
         <span class="cov3" title="4">k, err := s.store.UpdateKey(ctx, name, description, ttl, max, actor)
@@ -989,59 +1345,59 @@ func (s *Service) ListKeys(ctx context.Context, prefix string, limit, skip int64
 }</span>
 
 // buildValues validates every named key exists and the value matches its type.
-func (s *Service) buildValues(ctx context.Context, raw map[string]any) ([]models.TierValue, error) <span class="cov8" title="47">{
+func (s *Service) buildValues(ctx context.Context, raw map[string]any) ([]models.TierValue, error) <span class="cov8" title="62">{
         names := make([]string, 0, len(raw))
-        for n := range raw </span><span class="cov9" title="79">{
+        for n := range raw </span><span class="cov9" title="105">{
                 names = append(names, n)
         }</span>
-        <span class="cov8" title="47">slices.Sort(names)
+        <span class="cov8" title="62">slices.Sort(names)
         keys, err := s.store.GetKeys(ctx, names)
         if err != nil </span><span class="cov0" title="0">{
                 return nil, err
         }</span>
-        <span class="cov8" title="47">byName := map[string]models.Key{}
-        for _, k := range keys </span><span class="cov9" title="78">{
+        <span class="cov8" title="62">byName := map[string]models.Key{}
+        for _, k := range keys </span><span class="cov9" title="103">{
                 byName[k.Key] = k
         }</span>
-        <span class="cov8" title="47">out := make([]models.TierValue, 0, len(names))
-        for _, n := range names </span><span class="cov9" title="79">{
+        <span class="cov8" title="62">out := make([]models.TierValue, 0, len(names))
+        for _, n := range names </span><span class="cov9" title="105">{
                 k, ok := byName[n]
-                if !ok </span><span class="cov1" title="1">{
+                if !ok </span><span class="cov2" title="2">{
                         return nil, fmt.Errorf("%w: unknown key %q", models.ErrInvalid, n)
                 }</span>
-                <span class="cov9" title="78">v, err := models.ParseValue(k.Type, raw[n])
-                if err != nil </span><span class="cov2" title="2">{
+                <span class="cov9" title="103">v, err := models.ParseValue(k.Type, raw[n])
+                if err != nil </span><span class="cov3" title="3">{
                         return nil, fmt.Errorf("%w (key %q)", err, n)
                 }</span>
-                <span class="cov9" title="76">out = append(out, models.TierValue{Key: n, Type: k.Type, Value: v})</span>
+                <span class="cov9" title="100">out = append(out, models.TierValue{Key: n, Type: k.Type, Value: v})</span>
         }
-        <span class="cov8" title="44">return out, nil</span>
+        <span class="cov8" title="57">return out, nil</span>
 }
 
-func (s *Service) tierFromInput(ctx context.Context, in TierInput) (*models.Tier, error) <span class="cov8" title="49">{
+func (s *Service) tierFromInput(ctx context.Context, in TierInput) (*models.Tier, error) <span class="cov8" title="55">{
         if err := models.ValidateTierSlug(in.Slug); err != nil </span><span class="cov1" title="1">{
                 return nil, err
         }</span>
-        <span class="cov8" title="48">if strings.TrimSpace(in.Name) == "" </span><span class="cov1" title="1">{
+        <span class="cov8" title="54">if strings.TrimSpace(in.Name) == "" </span><span class="cov1" title="1">{
                 return nil, fmt.Errorf("%w: name is required", models.ErrInvalid)
         }</span>
-        <span class="cov8" title="47">values, err := s.buildValues(ctx, in.Values)
+        <span class="cov8" title="53">values, err := s.buildValues(ctx, in.Values)
         if err != nil </span><span class="cov3" title="3">{
                 return nil, err
         }</span>
-        <span class="cov8" title="44">return &amp;models.Tier{Slug: in.Slug, Name: in.Name, Description: in.Description, Values: values, StripePriceID: in.StripePriceID}, nil</span>
+        <span class="cov8" title="50">return &amp;models.Tier{Slug: in.Slug, Name: in.Name, Description: in.Description, Values: values, StripePriceID: in.StripePriceID}, nil</span>
 }
 
 // CreateTier adds a tier.
-func (s *Service) CreateTier(ctx context.Context, actor string, in TierInput) (*models.Tier, error) <span class="cov8" title="45">{
+func (s *Service) CreateTier(ctx context.Context, actor string, in TierInput) (*models.Tier, error) <span class="cov8" title="51">{
         t, err := s.tierFromInput(ctx, in)
-        if err != nil </span><span class="cov4" title="5">{
+        if err != nil </span><span class="cov3" title="5">{
                 return nil, err
         }</span>
-        <span class="cov7" title="40">if err := s.store.InsertTier(ctx, t, actor); err != nil </span><span class="cov1" title="1">{
+        <span class="cov7" title="46">if err := s.store.InsertTier(ctx, t, actor); err != nil </span><span class="cov1" title="1">{
                 return nil, err
         }</span>
-        <span class="cov7" title="39">return t, s.audit(ctx, actor, "create", "tier", t.Slug, nil, t)</span>
+        <span class="cov7" title="45">return t, s.audit(ctx, actor, "create", "tier", t.Slug, nil, t)</span>
 }
 
 // UpdateTier replaces a tier's name, description, values, and Stripe price ID.
@@ -1085,22 +1441,22 @@ func (s *Service) ListTiers(ctx context.Context, limit, skip int64) ([]models.Ti
 }</span>
 
 // SetDefaultTier makes an existing tier the one every user implicitly holds.
-func (s *Service) SetDefaultTier(ctx context.Context, actor, slug string) error <span class="cov6" title="24">{
+func (s *Service) SetDefaultTier(ctx context.Context, actor, slug string) error <span class="cov7" title="27">{
         tiers, err := s.store.GetTiers(ctx, []string{slug})
         if err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov6" title="24">if len(tiers) == 0 </span><span class="cov1" title="1">{
+        <span class="cov7" title="27">if len(tiers) == 0 </span><span class="cov1" title="1">{
                 return ErrNotFound
         }</span>
-        <span class="cov6" title="23">before, err := s.store.DefaultTierID(ctx)
+        <span class="cov6" title="26">before, err := s.store.DefaultTierID(ctx)
         if err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov6" title="23">if err := s.store.SetDefaultTierID(ctx, slug, actor); err != nil </span><span class="cov0" title="0">{
+        <span class="cov6" title="26">if err := s.store.SetDefaultTierID(ctx, slug, actor); err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov6" title="23">return s.audit(ctx, actor, "set_default", "default_tier", slug, before, slug)</span>
+        <span class="cov6" title="26">return s.audit(ctx, actor, "set_default", "default_tier", slug, before, slug)</span>
 }
 
 // DefaultTier returns the default tier id, or "" when none is configured.
@@ -1109,12 +1465,12 @@ func (s *Service) DefaultTier(ctx context.Context) (string, error) <span class="
 }</span>
 
 // ListAudit returns audit entries newest first.
-func (s *Service) ListAudit(ctx context.Context, limit, skip int64) ([]models.AuditEntry, error) <span class="cov1" title="1">{
+func (s *Service) ListAudit(ctx context.Context, limit, skip int64) ([]models.AuditEntry, error) <span class="cov2" title="2">{
         return s.store.ListAudit(ctx, limit, skip)
 }</span>
 </pre>
 		
-		<pre class="file" id="file8" style="display: none">package main
+		<pre class="file" id="file9" style="display: none">package main
 
 import (
         "context"
@@ -1222,10 +1578,11 @@ func main() <span class="cov0" title="0">{
         <span class="cov0" title="0">r.Use(ratelimit.Middleware(redisPool, ratelimit.DefaultOptions()))
 
         authzClient := authz.NewClient(cfg.AuthAPIURL, cfg.UsersAPIURL)
-        bill := billing.New(store, billing.NewStripeGateway(cfg.StripeSecretKey), billing.URLs{
+        catalogSvc := catalog.New(store)
+        bill := billing.New(store, billing.NewStripeGateway(cfg.StripeSecretKey), catalogSvc, billing.URLs{
                 CheckoutSuccess: cfg.CheckoutSuccessURL, CheckoutCancel: cfg.CheckoutCancelURL, PortalReturn: cfg.PortalReturnURL,
         })
-        server.SetupHandlers(r, catalog.New(store), bill, authzClient, cfg)
+        server.SetupHandlers(r, catalogSvc, bill, authzClient, cfg)
 
         _ = r.Run(util.GetEnv(apiconstants.BIND_ADDRESS, ":8000"))</span>
 }
@@ -1368,7 +1725,7 @@ func setupMetrics(r *gin.Engine) <span class="cov0" title="0">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file9" style="display: none">// Package config validates the settings the service cannot run without, so a bad deployment
+		<pre class="file" id="file10" style="display: none">// Package config validates the settings the service cannot run without, so a bad deployment
 // fails at startup with a message naming the problem instead of at the first request.
 package config
 
@@ -1453,7 +1810,7 @@ func absoluteURL(v string) bool <span class="cov8" title="9">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file10" style="display: none">package data
+		<pre class="file" id="file11" style="display: none">package data
 
 import (
         "context"
@@ -1472,6 +1829,7 @@ type MemoryStore struct {
         mu      sync.Mutex
         keys    []*models.Key
         tiers   []*models.Tier
+        prods   []*models.Product
         grants  []models.Grant
         audit   []models.AuditEntry
         custs   map[string]string
@@ -1634,6 +1992,78 @@ func (m *MemoryStore) DeleteTier(_ context.Context, slug, actor string) error <s
         return nil</span>
 }
 
+func (m *MemoryStore) findProduct(slug string) *models.Product <span class="cov0" title="0">{
+        for _, p := range m.prods </span><span class="cov0" title="0">{
+                if p.Slug == slug &amp;&amp; live(p.Auditable) </span><span class="cov0" title="0">{
+                        return p
+                }</span>
+        }
+        <span class="cov0" title="0">return nil</span>
+}
+
+func (m *MemoryStore) InsertProduct(_ context.Context, p *models.Product, actor string) error <span class="cov0" title="0">{
+        m.mu.Lock()
+        defer m.mu.Unlock()
+        if m.findProduct(p.Slug) != nil </span><span class="cov0" title="0">{
+                return ErrDuplicate
+        }</span>
+        <span class="cov0" title="0">mcore.StampCreate(&amp;p.Auditable, actor, m.now().UTC())
+        c := *p
+        m.prods = append(m.prods, &amp;c)
+        return nil</span>
+}
+
+func (m *MemoryStore) GetProducts(_ context.Context, slugs []string) ([]models.Product, error) <span class="cov0" title="0">{
+        m.mu.Lock()
+        defer m.mu.Unlock()
+        var out []models.Product
+        for _, p := range m.prods </span><span class="cov0" title="0">{
+                if live(p.Auditable) &amp;&amp; slices.Contains(slugs, p.Slug) </span><span class="cov0" title="0">{
+                        out = append(out, *p)
+                }</span>
+        }
+        <span class="cov0" title="0">return out, nil</span>
+}
+
+func (m *MemoryStore) ListProducts(_ context.Context, limit, skip int64) ([]models.Product, error) <span class="cov0" title="0">{
+        m.mu.Lock()
+        defer m.mu.Unlock()
+        var out []models.Product
+        for _, p := range m.prods </span><span class="cov0" title="0">{
+                if live(p.Auditable) </span><span class="cov0" title="0">{
+                        out = append(out, *p)
+                }</span>
+        }
+        <span class="cov0" title="0">slices.SortFunc(out, func(a, b models.Product) int </span><span class="cov0" title="0">{ return strings.Compare(a.Slug, b.Slug) }</span>)
+        <span class="cov0" title="0">return window(out, limit, skip), nil</span>
+}
+
+func (m *MemoryStore) UpdateProduct(_ context.Context, in *models.Product, actor string) (*models.Product, error) <span class="cov0" title="0">{
+        m.mu.Lock()
+        defer m.mu.Unlock()
+        p := m.findProduct(in.Slug)
+        if p == nil </span><span class="cov0" title="0">{
+                return nil, ErrNotFound
+        }</span>
+        <span class="cov0" title="0">p.Name, p.Description, p.Billing, p.Repeatable = in.Name, in.Description, in.Billing, in.Repeatable
+        p.StripePriceID, p.Entitlements = in.StripePriceID, in.Entitlements
+        mcore.StampUpdate(&amp;p.Auditable, actor, m.now().UTC())
+        c := *p
+        return &amp;c, nil</span>
+}
+
+func (m *MemoryStore) DeleteProduct(_ context.Context, slug, actor string) error <span class="cov0" title="0">{
+        m.mu.Lock()
+        defer m.mu.Unlock()
+        p := m.findProduct(slug)
+        if p == nil </span><span class="cov0" title="0">{
+                return ErrNotFound
+        }</span>
+        <span class="cov0" title="0">now := m.now().UTC()
+        p.DeletedAt, p.DeletedBy = &amp;now, &amp;actor
+        return nil</span>
+}
+
 func (m *MemoryStore) DefaultTierID(context.Context) (string, error) <span class="cov0" title="0">{
         m.mu.Lock()
         defer m.mu.Unlock()
@@ -1659,16 +2089,16 @@ func (m *MemoryStore) ActiveGrants(_ context.Context, userID string, now time.Ti
         <span class="cov1" title="1">return out, nil</span>
 }
 
-func (m *MemoryStore) GrantByExternal(_ context.Context, source, externalID string) (*models.Grant, error) <span class="cov6" title="3">{
+func (m *MemoryStore) GrantsByExternal(_ context.Context, source, externalID string) ([]models.Grant, error) <span class="cov6" title="3">{
         m.mu.Lock()
         defer m.mu.Unlock()
+        var out []models.Grant
         for _, g := range m.grants </span><span class="cov6" title="3">{
                 if g.Source == source &amp;&amp; g.ExternalID == externalID </span><span class="cov4" title="2">{
-                        c := g
-                        return &amp;c, nil
+                        out = append(out, g)
                 }</span>
         }
-        <span class="cov1" title="1">return nil, ErrNotFound</span>
+        <span class="cov6" title="3">return out, nil</span>
 }
 
 func (m *MemoryStore) GrantsByRef(_ context.Context, ref string) ([]models.Grant, error) <span class="cov7" title="4">{
@@ -1687,7 +2117,7 @@ func (m *MemoryStore) InsertGrant(_ context.Context, g *models.Grant, actor stri
         m.mu.Lock()
         defer m.mu.Unlock()
         for _, e := range m.grants </span><span class="cov1" title="1">{
-                if g.ExternalID != "" &amp;&amp; e.Source == g.Source &amp;&amp; e.ExternalID == g.ExternalID </span><span class="cov1" title="1">{
+                if g.ExternalID != "" &amp;&amp; e.Source == g.Source &amp;&amp; e.ExternalID == g.ExternalID &amp;&amp; e.Key == g.Key </span><span class="cov1" title="1">{
                         return ErrDuplicate
                 }</span>
         }
@@ -1700,7 +2130,7 @@ func (m *MemoryStore) UpdateGrant(_ context.Context, g *models.Grant, actor stri
         m.mu.Lock()
         defer m.mu.Unlock()
         for i, e := range m.grants </span><span class="cov4" title="2">{
-                if e.Source == g.Source &amp;&amp; e.ExternalID == g.ExternalID </span><span class="cov1" title="1">{
+                if e.Source == g.Source &amp;&amp; e.ExternalID == g.ExternalID &amp;&amp; e.Key == g.Key </span><span class="cov1" title="1">{
                         mcore.StampUpdate(&amp;g.Auditable, actor, m.now().UTC())
                         m.grants[i] = *g
                         return nil
@@ -1771,7 +2201,7 @@ func window[T any](s []T, limit, skip int64) []T <span class="cov0" title="0">{
 }
 </pre>
 		
-		<pre class="file" id="file11" style="display: none">package data
+		<pre class="file" id="file12" style="display: none">package data
 
 import (
         "context"
@@ -1806,17 +2236,21 @@ func (s *MongoStore) EnsureIndexes(ctx context.Context) error <span class="cov0"
         liveOnly := options.Index().SetUnique(true).
                 SetPartialFilterExpression(bson.D{{Key: "deleted_at", Value: bson.D{{Key: "$exists", Value: false}}}})
         idx := map[string][]mongo.IndexModel{
-                constants.KeysCollection:  {{Keys: bson.D{{Key: "key", Value: 1}}, Options: liveOnly}},
-                constants.TiersCollection: {{Keys: bson.D{{Key: "slug", Value: 1}}, Options: liveOnly}},
+                constants.KeysCollection:     {{Keys: bson.D{{Key: "key", Value: 1}}, Options: liveOnly}},
+                constants.TiersCollection:    {{Keys: bson.D{{Key: "slug", Value: 1}}, Options: liveOnly}},
+                constants.ProductsCollection: {{Keys: bson.D{{Key: "slug", Value: 1}}, Options: liveOnly}},
                 constants.GrantsCollection: {
                         {Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "status", Value: 1}}},
-                        {Keys: bson.D{{Key: "source", Value: 1}, {Key: "external_id", Value: 1}}, Options: options.Index().SetUnique(true).
+                        {Keys: bson.D{{Key: "source", Value: 1}, {Key: "external_id", Value: 1}, {Key: "key", Value: 1}}, Options: options.Index().SetUnique(true).
                                 SetPartialFilterExpression(bson.D{{Key: "external_id", Value: bson.D{{Key: "$exists", Value: true}}}})},
                         {Keys: bson.D{{Key: "refs", Value: 1}}},
                 },
                 constants.StripeCustomersCollection: {{Keys: bson.D{{Key: "user_id", Value: 1}}, Options: options.Index().SetUnique(true)}},
                 constants.AuditCollection:           {{Keys: bson.D{{Key: "at", Value: -1}}}},
         }
+        // The first grants index was unique on (source, external_id) alone, which would block a
+        // bundle's several grants sharing one external ID. Drop it; a missing index is not an error.
+        _, _ = s.db.Collection(constants.GrantsCollection).Indexes().DropOne(ctx, "source_1_external_id_1")
         for coll, ms := range idx </span><span class="cov0" title="0">{
                 if _, err := s.db.Collection(coll).Indexes().CreateMany(ctx, ms); err != nil </span><span class="cov0" title="0">{
                         return err
@@ -1934,6 +2368,38 @@ func (s *MongoStore) DeleteTier(ctx context.Context, slug, actor string) error <
         return s.softDelete(ctx, constants.TiersCollection, bson.D{notDeleted, {Key: "slug", Value: slug}}, actor)
 }</span>
 
+func (s *MongoStore) InsertProduct(ctx context.Context, p *models.Product, actor string) error <span class="cov0" title="0">{
+        mcore.StampCreate(&amp;p.Auditable, actor, time.Now().UTC())
+        return s.insert(ctx, constants.ProductsCollection, p)
+}</span>
+
+func (s *MongoStore) GetProducts(ctx context.Context, slugs []string) ([]models.Product, error) <span class="cov0" title="0">{
+        f := bson.D{notDeleted, {Key: "slug", Value: bson.D{{Key: "$in", Value: slugs}}}}
+        return find[models.Product](ctx, s.db.Collection(constants.ProductsCollection), f, nil)
+}</span>
+
+func (s *MongoStore) ListProducts(ctx context.Context, limit, skip int64) ([]models.Product, error) <span class="cov0" title="0">{
+        return find[models.Product](ctx, s.db.Collection(constants.ProductsCollection), bson.D{notDeleted}, page("slug", 1, limit, skip))
+}</span>
+
+func (s *MongoStore) UpdateProduct(ctx context.Context, p *models.Product, actor string) (*models.Product, error) <span class="cov0" title="0">{
+        set := bson.D{
+                {Key: "name", Value: p.Name}, {Key: "description", Value: p.Description},
+                {Key: "billing", Value: p.Billing}, {Key: "repeatable", Value: p.Repeatable},
+                {Key: "stripe_price_id", Value: p.StripePriceID}, {Key: "entitlements", Value: p.Entitlements},
+                {Key: "updated_at", Value: time.Now().UTC()}, {Key: "updated_by", Value: actor},
+        }
+        var out models.Product
+        err := s.db.Collection(constants.ProductsCollection).
+                FindOneAndUpdate(ctx, bson.D{notDeleted, {Key: "slug", Value: p.Slug}}, bson.D{{Key: "$set", Value: set}},
+                        options.FindOneAndUpdate().SetReturnDocument(options.After)).Decode(&amp;out)
+        return &amp;out, mapNoDoc(err)
+}</span>
+
+func (s *MongoStore) DeleteProduct(ctx context.Context, slug, actor string) error <span class="cov0" title="0">{
+        return s.softDelete(ctx, constants.ProductsCollection, bson.D{notDeleted, {Key: "slug", Value: slug}}, actor)
+}</span>
+
 func (s *MongoStore) DefaultTierID(ctx context.Context) (string, error) <span class="cov0" title="0">{
         var cfg models.CatalogConfig
         err := s.db.Collection(constants.CatalogConfigCollection).
@@ -1972,11 +2438,9 @@ func (s *MongoStore) ActiveGrants(ctx context.Context, userID string, now time.T
         return find[models.Grant](ctx, s.db.Collection(constants.GrantsCollection), f, nil)
 }</span>
 
-func (s *MongoStore) GrantByExternal(ctx context.Context, source, externalID string) (*models.Grant, error) <span class="cov0" title="0">{
-        var g models.Grant
-        err := s.db.Collection(constants.GrantsCollection).
-                FindOne(ctx, bson.D{{Key: "source", Value: source}, {Key: "external_id", Value: externalID}}).Decode(&amp;g)
-        return &amp;g, mapNoDoc(err)
+func (s *MongoStore) GrantsByExternal(ctx context.Context, source, externalID string) ([]models.Grant, error) <span class="cov0" title="0">{
+        f := bson.D{{Key: "source", Value: source}, {Key: "external_id", Value: externalID}}
+        return find[models.Grant](ctx, s.db.Collection(constants.GrantsCollection), f, nil)
 }</span>
 
 func (s *MongoStore) GrantsByRef(ctx context.Context, ref string) ([]models.Grant, error) <span class="cov0" title="0">{
@@ -2053,7 +2517,7 @@ func mapNoDoc(err error) error <span class="cov0" title="0">{
 }
 </pre>
 		
-		<pre class="file" id="file12" style="display: none">// Package docs Code generated by swaggo/swag. DO NOT EDIT
+		<pre class="file" id="file13" style="display: none">// Package docs Code generated by swaggo/swag. DO NOT EDIT
 package docs
 
 import "github.com/swaggo/swag"
@@ -2331,7 +2795,7 @@ func init() <span class="cov0" title="0">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file13" style="display: none">// Package models holds the entitlements catalog and grant documents.
+		<pre class="file" id="file14" style="display: none">// Package models holds the entitlements catalog and grant documents.
 package models
 
 import (
@@ -2424,6 +2888,10 @@ type Grant struct {
         Value      int64              `bson:"value,omitempty"`
         Source     string             `bson:"source"`
         ExternalID string             `bson:"external_id,omitempty"`
+        // ProductID and Quantity record which product purchase a key-level grant came from. All the
+        // grants of one purchase share ExternalID and are ended or revoked together.
+        ProductID string `bson:"product_id,omitempty"`
+        Quantity  int64  `bson:"quantity,omitempty"`
         // Refs are other Stripe object IDs (invoice, payment intent, charge) a refund or dispute
         // event can name instead of ExternalID.
         Refs            []string   `bson:"refs,omitempty"`
@@ -2437,6 +2905,35 @@ type Grant struct {
 func (g Grant) ActiveAt(now time.Time) bool <span class="cov6" title="4">{
         return g.Status == GrantActive &amp;&amp; (g.ValidUntil == nil || g.ValidUntil.After(now))
 }</span>
+
+// Billing kinds for a product.
+const (
+        BillingOneOff    = "one_off"
+        BillingRecurring = "recurring"
+)
+
+// ProductEntitlement is one key and value a product grants per unit purchased. Type is copied
+// from the key at write time (key types never change).
+type ProductEntitlement struct {
+        Key   string  `bson:"key"`
+        Type  KeyType `bson:"type"`
+        Value int64   `bson:"value"`
+}
+
+// Product is what a user buys: one Stripe price that grants one or more entitlements. A product
+// with more than one entitlement is a bundle. Repeatable means it can be bought with a quantity
+// (recurring) or more than once (one-off); otherwise a user holds at most one.
+type Product struct {
+        ID              primitive.ObjectID   `bson:"_id,omitempty" json:"-"`
+        Slug            string               `bson:"slug" json:"id"`
+        Name            string               `bson:"name" json:"name"`
+        Description     string               `bson:"description" json:"description"`
+        Billing         string               `bson:"billing" json:"billing"`
+        Repeatable      bool                 `bson:"repeatable" json:"repeatable"`
+        StripePriceID   string               `bson:"stripe_price_id,omitempty" json:"stripe_price_id,omitempty"`
+        Entitlements    []ProductEntitlement `bson:"entitlements" json:"-"`
+        mcore.Auditable `bson:",inline"`
+}
 
 // StripeCustomer maps a user to their Stripe customer so the billing portal can be opened.
 type StripeCustomer struct {
@@ -2472,6 +2969,9 @@ func ValidateTierSlug(slug string) error <span class="cov7" title="5">{
         }</span>
         <span class="cov1" title="1">return nil</span>
 }
+
+// ValidateProductSlug checks a product identifier; products share the tier id format.
+func ValidateProductSlug(slug string) error <span class="cov0" title="0">{ return ValidateTierSlug(slug) }</span>
 
 // ValidateMax checks a key's maximum: only limit keys carry one, and it must be a positive
 // integer that fits a limit value.
@@ -2520,7 +3020,7 @@ func FormatValue(t KeyType, v int64) any <span class="cov5" title="3">{
 }
 </pre>
 		
-		<pre class="file" id="file14" style="display: none">package server
+		<pre class="file" id="file15" style="display: none">package server
 
 import (
         "net/http"
@@ -2573,21 +3073,21 @@ func (b tierBody) input(slug string) catalog.TierInput <span class="cov7" title=
 }</span>
 
 // paging reads limit/skip query parameters, clamping limit to a sane page.
-func paging(c *gin.Context) (limit, skip int64) <span class="cov4" title="4">{
+func paging(c *gin.Context) (limit, skip int64) <span class="cov5" title="5">{
         limit, _ = strconv.ParseInt(c.DefaultQuery("limit", "50"), 10, 64)
         skip, _ = strconv.ParseInt(c.DefaultQuery("skip", "0"), 10, 64)
         if limit &lt; 1 || limit &gt; 200 </span><span class="cov0" title="0">{
                 limit = 50
         }</span>
-        <span class="cov4" title="4">if skip &lt; 0 </span><span class="cov0" title="0">{
+        <span class="cov5" title="5">if skip &lt; 0 </span><span class="cov0" title="0">{
                 skip = 0
         }</span>
-        <span class="cov4" title="4">return limit, skip</span>
+        <span class="cov5" title="5">return limit, skip</span>
 }
 
 // setupAdminHandlers registers the catalog write and read routes. Every route requires a user
 // token carrying the admin role; the resolved canonical user ID is the audit actor.
-func setupAdminHandlers(g *gin.Engine, svc *catalog.Service, client *authz.Client) <span class="cov9" title="21">{
+func setupAdminHandlers(g *gin.Engine, svc *catalog.Service, client *authz.Client) <span class="cov9" title="23">{
         a := g.Group("/admin", authz.RequireAnyRole(client, constants.ServiceName, authz.RoleAdmin))
 
         a.GET("/keys", func(c *gin.Context) </span><span class="cov2" title="2">{
@@ -2595,16 +3095,16 @@ func setupAdminHandlers(g *gin.Engine, svc *catalog.Service, client *authz.Clien
                 keys, err := svc.ListKeys(c.Request.Context(), c.Query("prefix"), limit, skip)
                 respond(c, http.StatusOK, keys, err)
         }</span>)
-        <span class="cov9" title="21">a.POST("/keys", func(c *gin.Context) </span><span class="cov9" title="22">{
+        <span class="cov9" title="23">a.POST("/keys", func(c *gin.Context) </span><span class="cov9" title="25">{
                 var b keyBody
                 if c.ShouldBindJSON(&amp;b) != nil </span><span class="cov1" title="1">{
                         badRequest(c, "malformed JSON body")
                         return
                 }</span>
-                <span class="cov9" title="21">k, err := svc.CreateKey(c.Request.Context(), authz.Viewer(c), catalog.KeyInput{Key: b.Key, Type: b.Type, Description: b.Description, TTLSeconds: b.TTLSeconds, Max: b.Max})
+                <span class="cov9" title="24">k, err := svc.CreateKey(c.Request.Context(), authz.Viewer(c), catalog.KeyInput{Key: b.Key, Type: b.Type, Description: b.Description, TTLSeconds: b.TTLSeconds, Max: b.Max})
                 respond(c, http.StatusCreated, k, err)</span>
         })
-        <span class="cov9" title="21">a.PUT("/keys/:key", func(c *gin.Context) </span><span class="cov3" title="3">{
+        <span class="cov9" title="23">a.PUT("/keys/:key", func(c *gin.Context) </span><span class="cov3" title="3">{
                 var b keyBody
                 if c.ShouldBindJSON(&amp;b) != nil </span><span class="cov0" title="0">{
                         badRequest(c, "malformed JSON body")
@@ -2613,11 +3113,11 @@ func setupAdminHandlers(g *gin.Engine, svc *catalog.Service, client *authz.Clien
                 <span class="cov3" title="3">k, err := svc.UpdateKey(c.Request.Context(), authz.Viewer(c), c.Param("key"), b.Description, b.TTLSeconds, b.Max)
                 respond(c, http.StatusOK, k, err)</span>
         })
-        <span class="cov9" title="21">a.DELETE("/keys/:key", func(c *gin.Context) </span><span class="cov2" title="2">{
+        <span class="cov9" title="23">a.DELETE("/keys/:key", func(c *gin.Context) </span><span class="cov2" title="2">{
                 respondEmpty(c, svc.DeleteKey(c.Request.Context(), authz.Viewer(c), c.Param("key")))
         }</span>)
 
-        <span class="cov9" title="21">a.GET("/tiers", func(c *gin.Context) </span><span class="cov1" title="1">{
+        <span class="cov9" title="23">a.GET("/tiers", func(c *gin.Context) </span><span class="cov1" title="1">{
                 limit, skip := paging(c)
                 tiers, err := svc.ListTiers(c.Request.Context(), limit, skip)
                 vos := make([]TierVO, len(tiers))
@@ -2626,16 +3126,16 @@ func setupAdminHandlers(g *gin.Engine, svc *catalog.Service, client *authz.Clien
                 }</span>
                 <span class="cov1" title="1">respond(c, http.StatusOK, vos, err)</span>
         })
-        <span class="cov9" title="21">a.POST("/tiers", func(c *gin.Context) </span><span class="cov7" title="10">{
+        <span class="cov9" title="23">a.POST("/tiers", func(c *gin.Context) </span><span class="cov6" title="10">{
                 var b tierBody
                 if c.ShouldBindJSON(&amp;b) != nil </span><span class="cov0" title="0">{
                         badRequest(c, "malformed JSON body")
                         return
                 }</span>
-                <span class="cov7" title="10">t, err := svc.CreateTier(c.Request.Context(), authz.Viewer(c), b.input(b.ID))
+                <span class="cov6" title="10">t, err := svc.CreateTier(c.Request.Context(), authz.Viewer(c), b.input(b.ID))
                 respondTier(c, http.StatusCreated, t, err)</span>
         })
-        <span class="cov9" title="21">a.PUT("/tiers/:id", func(c *gin.Context) </span><span class="cov2" title="2">{
+        <span class="cov9" title="23">a.PUT("/tiers/:id", func(c *gin.Context) </span><span class="cov2" title="2">{
                 var b tierBody
                 if c.ShouldBindJSON(&amp;b) != nil </span><span class="cov0" title="0">{
                         badRequest(c, "malformed JSON body")
@@ -2644,15 +3144,17 @@ func setupAdminHandlers(g *gin.Engine, svc *catalog.Service, client *authz.Clien
                 <span class="cov2" title="2">t, err := svc.UpdateTier(c.Request.Context(), authz.Viewer(c), b.input(c.Param("id")))
                 respondTier(c, http.StatusOK, t, err)</span>
         })
-        <span class="cov9" title="21">a.DELETE("/tiers/:id", func(c *gin.Context) </span><span class="cov1" title="1">{
+        <span class="cov9" title="23">a.DELETE("/tiers/:id", func(c *gin.Context) </span><span class="cov1" title="1">{
                 respondEmpty(c, svc.DeleteTier(c.Request.Context(), authz.Viewer(c), c.Param("id")))
         }</span>)
 
-        <span class="cov9" title="21">a.GET("/default-tier", func(c *gin.Context) </span><span class="cov1" title="1">{
+        <span class="cov9" title="23">setupAdminProductHandlers(a, svc)
+
+        a.GET("/default-tier", func(c *gin.Context) </span><span class="cov1" title="1">{
                 id, err := svc.DefaultTier(c.Request.Context())
                 respond(c, http.StatusOK, gin.H{"id": id}, err)
         }</span>)
-        <span class="cov9" title="21">a.PUT("/default-tier", func(c *gin.Context) </span><span class="cov7" title="11">{
+        <span class="cov9" title="23">a.PUT("/default-tier", func(c *gin.Context) </span><span class="cov7" title="11">{
                 var b struct {
                         ID string `json:"id"`
                 }
@@ -2660,22 +3162,22 @@ func setupAdminHandlers(g *gin.Engine, svc *catalog.Service, client *authz.Clien
                         badRequest(c, "id is required")
                         return
                 }</span>
-                <span class="cov7" title="10">respondEmpty(c, svc.SetDefaultTier(c.Request.Context(), authz.Viewer(c), b.ID))</span>
+                <span class="cov6" title="10">respondEmpty(c, svc.SetDefaultTier(c.Request.Context(), authz.Viewer(c), b.ID))</span>
         })
 
-        <span class="cov9" title="21">a.GET("/audit", func(c *gin.Context) </span><span class="cov1" title="1">{
+        <span class="cov9" title="23">a.GET("/audit", func(c *gin.Context) </span><span class="cov1" title="1">{
                 limit, skip := paging(c)
                 entries, err := svc.ListAudit(c.Request.Context(), limit, skip)
                 respond(c, http.StatusOK, entries, err)
         }</span>)
 }
 
-func respond(c *gin.Context, status int, body any, err error) <span class="cov10" title="29">{
+func respond(c *gin.Context, status int, body any, err error) <span class="cov10" title="33">{
         if err != nil </span><span class="cov4" title="4">{
                 writeError(c, err)
                 return
         }</span>
-        <span class="cov9" title="25">c.JSON(status, body)</span>
+        <span class="cov9" title="29">c.JSON(status, body)</span>
 }
 
 func respondTier(c *gin.Context, status int, t *models.Tier, err error) <span class="cov7" title="12">{
@@ -2683,19 +3185,114 @@ func respondTier(c *gin.Context, status int, t *models.Tier, err error) <span cl
                 writeError(c, err)
                 return
         }</span>
-        <span class="cov7" title="10">c.JSON(status, toTierVO(*t))</span>
+        <span class="cov6" title="10">c.JSON(status, toTierVO(*t))</span>
 }
 
-func respondEmpty(c *gin.Context, err error) <span class="cov7" title="13">{
-        if err != nil </span><span class="cov3" title="3">{
+func respondEmpty(c *gin.Context, err error) <span class="cov7" title="15">{
+        if err != nil </span><span class="cov4" title="4">{
                 writeError(c, err)
                 return
         }</span>
-        <span class="cov7" title="10">c.Status(http.StatusNoContent)</span>
+        <span class="cov7" title="11">c.Status(http.StatusNoContent)</span>
 }
 </pre>
 		
-		<pre class="file" id="file15" style="display: none">package server
+		<pre class="file" id="file16" style="display: none">package server
+
+import (
+        "net/http"
+
+        "github.com/gin-gonic/gin"
+        "github.com/sweetrpg/authz-client.go/authz"
+        "github.com/sweetrpg/entitlements-api/catalog"
+        "github.com/sweetrpg/entitlements-api/models"
+        mcore "github.com/sweetrpg/model-core.go/models"
+)
+
+// ProductVO is the API shape of a product: entitlement values are rendered per key type.
+type ProductVO struct {
+        ID            string         `json:"id"`
+        Name          string         `json:"name"`
+        Description   string         `json:"description"`
+        Billing       string         `json:"billing"`
+        Repeatable    bool           `json:"repeatable"`
+        StripePriceID string         `json:"stripe_price_id,omitempty"`
+        Entitlements  map[string]any `json:"entitlements"`
+        mcore.Auditable
+}
+
+func toProductVO(p models.Product) ProductVO <span class="cov4" title="4">{
+        ents := make(map[string]any, len(p.Entitlements))
+        for _, e := range p.Entitlements </span><span class="cov5" title="5">{
+                ents[e.Key] = models.FormatValue(e.Type, e.Value)
+        }</span>
+        <span class="cov4" title="4">return ProductVO{
+                ID: p.Slug, Name: p.Name, Description: p.Description, Billing: p.Billing, Repeatable: p.Repeatable,
+                StripePriceID: p.StripePriceID, Entitlements: ents, Auditable: p.Auditable,
+        }</span>
+}
+
+type productBody struct {
+        ID            string         `json:"id"`
+        Name          string         `json:"name"`
+        Description   string         `json:"description"`
+        Billing       string         `json:"billing"`
+        Repeatable    bool           `json:"repeatable"`
+        StripePriceID string         `json:"stripe_price_id"`
+        Entitlements  map[string]any `json:"entitlements"`
+}
+
+func (b productBody) input(slug string) catalog.ProductInput <span class="cov6" title="6">{
+        return catalog.ProductInput{
+                Slug: slug, Name: b.Name, Description: b.Description, Billing: b.Billing,
+                Repeatable: b.Repeatable, StripePriceID: b.StripePriceID, Entitlements: b.Entitlements,
+        }
+}</span>
+
+func respondProduct(c *gin.Context, status int, p *models.Product, err error) <span class="cov6" title="6">{
+        if err != nil </span><span class="cov4" title="3">{
+                writeError(c, err)
+                return
+        }</span>
+        <span class="cov4" title="3">c.JSON(status, toProductVO(*p))</span>
+}
+
+// setupAdminProductHandlers registers the product routes on the admin group.
+func setupAdminProductHandlers(a *gin.RouterGroup, svc *catalog.Service) <span class="cov10" title="23">{
+        a.GET("/products", func(c *gin.Context) </span><span class="cov1" title="1">{
+                limit, skip := paging(c)
+                products, err := svc.ListProducts(c.Request.Context(), limit, skip)
+                vos := make([]ProductVO, len(products))
+                for i, p := range products </span><span class="cov1" title="1">{
+                        vos[i] = toProductVO(p)
+                }</span>
+                <span class="cov1" title="1">respond(c, http.StatusOK, vos, err)</span>
+        })
+        <span class="cov10" title="23">a.POST("/products", func(c *gin.Context) </span><span class="cov5" title="5">{
+                var b productBody
+                if c.ShouldBindJSON(&amp;b) != nil </span><span class="cov1" title="1">{
+                        badRequest(c, "malformed JSON body")
+                        return
+                }</span>
+                <span class="cov4" title="4">p, err := svc.CreateProduct(c.Request.Context(), authz.Viewer(c), b.input(b.ID))
+                respondProduct(c, http.StatusCreated, p, err)</span>
+        })
+        <span class="cov10" title="23">a.PUT("/products/:id", func(c *gin.Context) </span><span class="cov4" title="3">{
+                var b productBody
+                if c.ShouldBindJSON(&amp;b) != nil </span><span class="cov1" title="1">{
+                        badRequest(c, "malformed JSON body")
+                        return
+                }</span>
+                <span class="cov2" title="2">p, err := svc.UpdateProduct(c.Request.Context(), authz.Viewer(c), b.input(c.Param("id")))
+                respondProduct(c, http.StatusOK, p, err)</span>
+        })
+        <span class="cov10" title="23">a.DELETE("/products/:id", func(c *gin.Context) </span><span class="cov2" title="2">{
+                respondEmpty(c, svc.DeleteProduct(c.Request.Context(), authz.Viewer(c), c.Param("id")))
+        }</span>)
+}
+</pre>
+		
+		<pre class="file" id="file17" style="display: none">package server
 
 import (
         "encoding/base64"
@@ -2720,29 +3317,32 @@ type SessionVO struct {
 }
 
 type checkoutBody struct {
-        TierID string `json:"tier_id"`
+        TierID    string `json:"tier_id"`
+        ProductID string `json:"product_id"`
+        Quantity  int64  `json:"quantity"`
 }
 
 // setupBillingHandlers registers the user-facing billing routes. Like checks, they authenticate
 // with the end user's own bearer token, so a session is always created for the verified caller.
-func setupBillingHandlers(g *gin.Engine, svc *billing.Service, client *authz.Client) <span class="cov10" title="21">{
+func setupBillingHandlers(g *gin.Engine, svc *billing.Service, client *authz.Client) <span class="cov10" title="23">{
         s := g.Group("/billing", authz.RequireAnyRole(client, constants.ServiceName, anyRole...))
 
-        s.POST("/checkout", func(c *gin.Context) </span><span class="cov5" title="4">{
+        s.POST("/checkout", func(c *gin.Context) </span><span class="cov6" title="7">{
                 var b checkoutBody
-                if c.ShouldBindJSON(&amp;b) != nil || b.TierID == "" </span><span class="cov3" title="2">{
-                        badRequest(c, "tier_id is required")
+                if c.ShouldBindJSON(&amp;b) != nil </span><span class="cov1" title="1">{
+                        badRequest(c, "malformed JSON body")
                         return
                 }</span>
-                <span class="cov3" title="2">url, err := svc.Checkout(c.Request.Context(), authz.Viewer(c), tokenEmail(authz.Token(c)), b.TierID)
-                if err != nil </span><span class="cov1" title="1">{
+                <span class="cov6" title="6">url, err := svc.Checkout(c.Request.Context(), authz.Viewer(c), tokenEmail(authz.Token(c)),
+                        billing.CheckoutRequest{TierID: b.TierID, ProductID: b.ProductID, Quantity: b.Quantity})
+                if err != nil </span><span class="cov4" title="4">{
                         writeError(c, err)
                         return
                 }</span>
-                <span class="cov1" title="1">c.JSON(http.StatusOK, SessionVO{URL: url})</span>
+                <span class="cov2" title="2">c.JSON(http.StatusOK, SessionVO{URL: url})</span>
         })
 
-        <span class="cov10" title="21">s.POST("/portal", func(c *gin.Context) </span><span class="cov3" title="2">{
+        <span class="cov10" title="23">s.POST("/portal", func(c *gin.Context) </span><span class="cov2" title="2">{
                 url, err := svc.Portal(c.Request.Context(), authz.Viewer(c))
                 if err != nil </span><span class="cov1" title="1">{
                         writeError(c, err)
@@ -2755,8 +3355,8 @@ func setupBillingHandlers(g *gin.Engine, svc *billing.Service, client *authz.Cli
 // setupWebhookHandlers registers the public Stripe webhook. It sits outside the user-token
 // groups on purpose: Stripe cannot present a user token, so the signature over the raw body is
 // the only authentication, and nothing is read or changed before it verifies.
-func setupWebhookHandlers(g *gin.Engine, svc *billing.Service, signingSecret string) <span class="cov10" title="21">{
-        g.POST("/webhooks/stripe", func(c *gin.Context) </span><span class="cov7" title="8">{
+func setupWebhookHandlers(g *gin.Engine, svc *billing.Service, signingSecret string) <span class="cov10" title="23">{
+        g.POST("/webhooks/stripe", func(c *gin.Context) </span><span class="cov6" title="8">{
                 body, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, constants.MaxWebhookBodyBytes))
                 if err != nil </span><span class="cov0" title="0">{
                         badRequest(c, "unreadable body")
@@ -2764,30 +3364,30 @@ func setupWebhookHandlers(g *gin.Engine, svc *billing.Service, signingSecret str
                 }</span>
                 // Event objects are decoded by the handlers' own minimal structs, so the SDK's API-version
                 // compatibility check would only reject events for fields we never read.
-                <span class="cov7" title="8">ev, err := webhook.ConstructEventWithOptions(body, c.GetHeader("Stripe-Signature"), signingSecret,
+                <span class="cov6" title="8">ev, err := webhook.ConstructEventWithOptions(body, c.GetHeader("Stripe-Signature"), signingSecret,
                         webhook.ConstructEventOptions{IgnoreAPIVersionMismatch: true})
-                if err != nil </span><span class="cov5" title="4">{
+                if err != nil </span><span class="cov4" title="4">{
                         c.JSON(http.StatusBadRequest, apiv.ErrorVO{Error: "invalid_signature", Message: "signature verification failed"})
                         return
                 }</span>
-                <span class="cov5" title="4">err = svc.HandleEvent(c.Request.Context(), billing.Event{ID: ev.ID, Type: string(ev.Type), Object: ev.Data.Raw})
+                <span class="cov4" title="4">err = svc.HandleEvent(c.Request.Context(), billing.Event{ID: ev.ID, Type: string(ev.Type), Object: ev.Data.Raw})
                 if err != nil </span><span class="cov0" title="0">{
                         logging.Logger.Error("stripe event failed", "event", ev.ID, "type", string(ev.Type), "error", err.Error())
                         c.JSON(http.StatusInternalServerError, apiv.ErrorVO{Error: "internal_error", Message: "event not processed"})
                         return
                 }</span>
-                <span class="cov5" title="4">c.Status(http.StatusOK)</span>
+                <span class="cov4" title="4">c.Status(http.StatusOK)</span>
         })
 }
 
 // tokenEmail reads the email claim from a token auth-api has already verified, to prefill
 // Checkout. It does not verify anything itself and returns "" when the claim is absent.
-func tokenEmail(token string) string <span class="cov6" title="7">{
+func tokenEmail(token string) string <span class="cov7" title="11">{
         parts := strings.Split(token, ".")
-        if len(parts) != 3 </span><span class="cov4" title="3">{
+        if len(parts) != 3 </span><span class="cov6" title="7">{
                 return ""
         }</span>
-        <span class="cov5" title="4">payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+        <span class="cov4" title="4">payload, err := base64.RawURLEncoding.DecodeString(parts[1])
         if err != nil </span><span class="cov1" title="1">{
                 return ""
         }</span>
@@ -2797,11 +3397,11 @@ func tokenEmail(token string) string <span class="cov6" title="7">{
         if json.Unmarshal(payload, &amp;claims) != nil </span><span class="cov1" title="1">{
                 return ""
         }</span>
-        <span class="cov3" title="2">return claims.Email</span>
+        <span class="cov2" title="2">return claims.Email</span>
 }
 </pre>
 		
-		<pre class="file" id="file16" style="display: none">package server
+		<pre class="file" id="file18" style="display: none">package server
 
 import (
         "fmt"
@@ -2828,7 +3428,7 @@ type BatchCheckVO struct {
         Results []CheckVO `json:"results"`
 }
 
-func toCheckVO(r catalog.Result) CheckVO <span class="cov7" title="8">{
+func toCheckVO(r catalog.Result) CheckVO <span class="cov6" title="8">{
         return CheckVO{Key: r.Key, Type: r.Type, Value: models.FormatValue(r.Type, r.Value), TTLSeconds: r.TTLSeconds}
 }</span>
 
@@ -2838,7 +3438,7 @@ var anyRole = []string{authz.RoleUser, authz.RoleSubmitter, authz.RoleEditor, au
 // setupCheckHandlers registers the check routes. The caller passes the end user's own bearer
 // token; auth-api verifies it against Auth0 and users-api resolves the canonical user ID, so the
 // answer is always about the verified caller and no user ID is accepted from the request.
-func setupCheckHandlers(g *gin.Engine, svc *catalog.Service, client *authz.Client) <span class="cov10" title="21">{
+func setupCheckHandlers(g *gin.Engine, svc *catalog.Service, client *authz.Client) <span class="cov10" title="23">{
         s := g.Group("/check", authz.RequireAnyRole(client, constants.ServiceName, anyRole...))
 
         s.GET("", checkOne(svc))
@@ -2857,7 +3457,7 @@ func setupCheckHandlers(g *gin.Engine, svc *catalog.Service, client *authz.Clien
 //        @Failure                401        {object}        vo.ErrorVO
 //        @Failure                404        {object}        vo.ErrorVO
 //        @Router                        /check [get]
-func checkOne(svc *catalog.Service) gin.HandlerFunc <span class="cov10" title="21">{
+func checkOne(svc *catalog.Service) gin.HandlerFunc <span class="cov10" title="23">{
         return func(c *gin.Context) </span><span class="cov6" title="6">{
                 key := c.Query("key")
                 if key == "" </span><span class="cov1" title="1">{
@@ -2869,7 +3469,7 @@ func checkOne(svc *catalog.Service) gin.HandlerFunc <span class="cov10" title="2
                         writeError(c, err)
                         return
                 }</span>
-                <span class="cov5" title="4">vo := toCheckVO(results[0])
+                <span class="cov4" title="4">vo := toCheckVO(results[0])
                 c.Header("Cache-Control", cacheControl(vo.TTLSeconds))
                 c.JSON(http.StatusOK, vo)</span>
         }
@@ -2888,10 +3488,10 @@ func checkOne(svc *catalog.Service) gin.HandlerFunc <span class="cov10" title="2
 //        @Failure                401                {object}        vo.ErrorVO
 //        @Failure                404                {object}        vo.ErrorVO
 //        @Router                        /check/batch [get]
-func checkBatch(svc *catalog.Service) gin.HandlerFunc <span class="cov10" title="21">{
+func checkBatch(svc *catalog.Service) gin.HandlerFunc <span class="cov10" title="23">{
         return func(c *gin.Context) </span><span class="cov6" title="7">{
                 keys, prefix := c.QueryArray("key"), c.Query("prefix")
-                if code, msg := validateBatchSelector(keys, prefix); code != "" </span><span class="cov5" title="4">{
+                if code, msg := validateBatchSelector(keys, prefix); code != "" </span><span class="cov4" title="4">{
                         c.JSON(http.StatusBadRequest, apiv.ErrorVO{Error: code, Message: msg})
                         return
                 }</span>
@@ -2899,18 +3499,18 @@ func checkBatch(svc *catalog.Service) gin.HandlerFunc <span class="cov10" title=
                 var err error
                 if prefix != "" </span><span class="cov1" title="1">{
                         results, err = svc.CheckPrefix(c.Request.Context(), authz.Viewer(c), prefix)
-                }</span> else<span class="cov3" title="2"> {
+                }</span> else<span class="cov2" title="2"> {
                         results, err = svc.Check(c.Request.Context(), authz.Viewer(c), keys)
                 }</span>
                 <span class="cov4" title="3">if err != nil </span><span class="cov1" title="1">{
                         writeError(c, err)
                         return
                 }</span>
-                <span class="cov3" title="2">out := BatchCheckVO{Results: make([]CheckVO, len(results))}
-                for i, r := range results </span><span class="cov5" title="4">{
+                <span class="cov2" title="2">out := BatchCheckVO{Results: make([]CheckVO, len(results))}
+                for i, r := range results </span><span class="cov4" title="4">{
                         out.Results[i] = toCheckVO(r)
                 }</span>
-                <span class="cov3" title="2">c.JSON(http.StatusOK, out)</span>
+                <span class="cov2" title="2">c.JSON(http.StatusOK, out)</span>
         }
 }
 
@@ -2918,7 +3518,7 @@ func checkBatch(svc *catalog.Service) gin.HandlerFunc <span class="cov10" title=
 // caps in constants. It returns an error code and message, or "" when the selector is valid.
 func validateBatchSelector(keys []string, prefix string) (code, msg string) <span class="cov6" title="7">{
         switch </span>{
-        case (len(keys) == 0) == (prefix == ""):<span class="cov3" title="2">
+        case (len(keys) == 0) == (prefix == ""):<span class="cov2" title="2">
                 return "invalid_selector", "provide either key (repeatable) or prefix, not both and not neither"</span>
         case len(keys) &gt; constants.MaxBatchKeys:<span class="cov1" title="1">
                 return "too_many_keys", fmt.Sprintf("at most %d keys per request", constants.MaxBatchKeys)</span>
@@ -2928,7 +3528,7 @@ func validateBatchSelector(keys []string, prefix string) (code, msg string) <spa
         <span class="cov4" title="3">return "", ""</span>
 }
 
-func cacheControl(ttl int) string <span class="cov5" title="4">{
+func cacheControl(ttl int) string <span class="cov4" title="4">{
         if ttl &lt;= 0 </span><span class="cov1" title="1">{
                 return "no-store"
         }</span>
@@ -2936,7 +3536,7 @@ func cacheControl(ttl int) string <span class="cov5" title="4">{
 }
 </pre>
 		
-		<pre class="file" id="file17" style="display: none">package server
+		<pre class="file" id="file19" style="display: none">package server
 
 import (
         "errors"
@@ -2959,19 +3559,19 @@ type MaxExceededVO struct {
 
 // writeError maps a service error to a response. Unexpected errors are logged and reported
 // without detail.
-func writeError(c *gin.Context, err error) <span class="cov10" title="14">{
+func writeError(c *gin.Context, err error) <span class="cov10" title="21">{
         var unknown catalog.UnknownKeysError
         var exceeded catalog.MaxExceededError
         switch </span>{
-        case errors.As(err, &amp;exceeded):<span class="cov1" title="1">
+        case errors.As(err, &amp;exceeded):<span class="cov3" title="2">
                 c.JSON(http.StatusConflict, MaxExceededVO{Error: "exceeds_maximum", Message: err.Error(), Key: exceeded.Key, UnitsRemaining: exceeded.Remaining})</span>
-        case errors.Is(err, models.ErrInvalid):<span class="cov5" title="4">
+        case errors.Is(err, models.ErrInvalid):<span class="cov6" title="7">
                 c.JSON(http.StatusBadRequest, apiv.ErrorVO{Error: "invalid_request", Message: err.Error()})</span>
         case errors.As(err, &amp;unknown):<span class="cov3" title="2">
                 c.JSON(http.StatusNotFound, apiv.ErrorVO{Error: "unknown_key", Message: err.Error()})</span>
-        case errors.Is(err, catalog.ErrNotFound):<span class="cov6" title="5">
+        case errors.Is(err, catalog.ErrNotFound):<span class="cov6" title="7">
                 c.JSON(http.StatusNotFound, apiv.ErrorVO{Error: "not_found", Message: "not found"})</span>
-        case errors.Is(err, catalog.ErrDuplicate):<span class="cov1" title="1">
+        case errors.Is(err, catalog.ErrDuplicate):<span class="cov3" title="2">
                 c.JSON(http.StatusConflict, apiv.ErrorVO{Error: "duplicate", Message: "already exists"})</span>
         case errors.Is(err, catalog.ErrInUse):<span class="cov1" title="1">
                 c.JSON(http.StatusConflict, apiv.ErrorVO{Error: "in_use", Message: err.Error()})</span>
@@ -2981,12 +3581,12 @@ func writeError(c *gin.Context, err error) <span class="cov10" title="14">{
         }
 }
 
-func badRequest(c *gin.Context, msg string) <span class="cov6" title="5">{
+func badRequest(c *gin.Context, msg string) <span class="cov6" title="6">{
         c.JSON(http.StatusBadRequest, apiv.ErrorVO{Error: "invalid_request", Message: msg})
 }</span>
 </pre>
 		
-		<pre class="file" id="file18" style="display: none">package server
+		<pre class="file" id="file20" style="display: none">package server
 
 import (
         "github.com/gin-gonic/gin"
@@ -2997,7 +3597,7 @@ import (
 )
 
 // SetupHandlers wires every route.
-func SetupHandlers(g *gin.Engine, svc *catalog.Service, bill *billing.Service, authzClient *authz.Client, cfg *config.Config) <span class="cov10" title="21">{
+func SetupHandlers(g *gin.Engine, svc *catalog.Service, bill *billing.Service, authzClient *authz.Client, cfg *config.Config) <span class="cov10" title="23">{
         setupAdminHandlers(g, svc, authzClient)
         setupCheckHandlers(g, svc, authzClient)
         setupBillingHandlers(g, bill, authzClient)
@@ -3006,7 +3606,7 @@ func SetupHandlers(g *gin.Engine, svc *catalog.Service, bill *billing.Service, a
 }</span>
 </pre>
 		
-		<pre class="file" id="file19" style="display: none">package server
+		<pre class="file" id="file21" style="display: none">package server
 
 import (
         "net/http"
@@ -3017,15 +3617,15 @@ import (
         "github.com/sweetrpg/common.go/logging"
 )
 
-func setupStatusHandlers(g *gin.Engine) <span class="cov10" title="21">{
+func setupStatusHandlers(g *gin.Engine) <span class="cov10" title="23">{
         logging.Logger.Info("Setting up status endpoint handlers...")
 
-        </span><span class="cov10" title="21">{
+        </span><span class="cov10" title="23">{
                 a := g.Group("/status")
                 a.GET("/health", healthHandler)
         }</span>
 
-        <span class="cov10" title="21">g.GET("/status/ping", pingHandler)</span>
+        <span class="cov10" title="23">g.GET("/status/ping", pingHandler)</span>
 }
 
 // Health check.
