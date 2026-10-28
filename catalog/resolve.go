@@ -8,10 +8,10 @@ import (
 
 // Resolve returns the effective value per key:
 //
-//	effective = max(default tier, active tier grants) + sum(active key-level grants)
+//	effective = max(default tier, tier grants, at_least grants) + sum(add grants)
 //
 // for a limit key; a flag key is on when its tier-derived value is on or any key-level grant is
-// active. Tiers are alternatives (maximum); purchased units add. types says which keys are
+// active. Tiers and at_least grants are alternatives (maximum); purchased add units stack. types says which keys are
 // flags, any key not listed is treated as a limit. A key with no source is absent from the map
 // (read as zero or false). Grants are re-checked for activity at now so the rule holds for any
 // Store.
@@ -40,9 +40,12 @@ func Resolve(def *models.Tier, tiers map[string]models.Tier, grants []models.Gra
 		if g.Key == "" {
 			continue
 		}
-		if types[g.Key] == models.TypeFlag {
+		switch {
+		case types[g.Key] == models.TypeFlag:
 			units[g.Key] = 1
-		} else {
+		case g.Mode == models.ModeAtLeast:
+			raise(g.Key, g.Value)
+		default:
 			units[g.Key] += g.Value
 		}
 	}

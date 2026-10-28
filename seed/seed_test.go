@@ -38,8 +38,8 @@ func TestEmbeddedSeedIsConsistent(t *testing.T) {
 			t.Errorf("free tier names undeclared key %s", k)
 		}
 	}
-	if len(d.Products) != 7 {
-		t.Errorf("products = %d, want 7", len(d.Products))
+	if len(d.Products) != 9 {
+		t.Errorf("products = %d, want 9", len(d.Products))
 	}
 	for _, p := range d.Products {
 		if p.StripePriceID != "" {

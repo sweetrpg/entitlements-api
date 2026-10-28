@@ -27,9 +27,10 @@ whole batch. A batch with both or neither of `key`/`prefix` returns 400 `invalid
 
 ## Resolution
 
-`effective = max(default tier, active tier grants) + sum(active key-level grants)` for a limit
-key. A flag is on when its tier value is on or any key-level grant is active. Tiers are
-alternatives; purchased units (key-level grants) add, and each ends independently.
+`effective = max(default tier, tier grants, at_least grants) + sum(add grants)` for a limit key,
+then clamped to the key's maximum. A flag is on when its tier value is on or any key-level grant is
+active. Tiers and `at_least` grants are alternatives (the highest wins); purchased `add` units
+stack, and each ends independently.
 
 A limit key can carry a `max` (set through `/admin/keys`, absent means none). Every check clamps
 the effective value to it, so a user never sees more than the maximum. `catalog.CheckPurchase`
@@ -59,6 +60,11 @@ more than one makes it a bundle. `billing` is `one_off` or `recurring`; `repeata
 quantity (recurring) or repeat purchases (one-off), otherwise a user holds it once. Products are
 catalog data (`/admin/products`); checkout refuses a product with no Stripe price ID, an unknown
 key, or a quantity that would pass a key's maximum.
+
+An entitlement is `add` (a bare value, stacks per unit) or `at_least`
+(`{"value": 10, "mode": "at_least"}`, a floor; two products at 10 and 20 give 20, not 30, and the
+value ignores quantity). Checkout rejects with 409 `no_increase` a product whose `at_least`
+entitlements would not raise the user's current value; a bundle passes if any one raises it.
 
 A purchase creates one key-level grant per entitlement, valued per-unit value x quantity and
 sharing the purchase's Stripe ID (payment intent, or subscription), so a refund, dispute, or

@@ -38,6 +38,8 @@
     {"id": "rosters", "name": "Rosters", "description": "Five more saved rosters per unit", "billing": "recurring", "repeatable": true, "entitlements": {"initiative.saved_rosters": 5}},
     {"id": "themes", "name": "Themes", "description": "Packaged themes, customization, and one theme slot", "billing": "one_off", "entitlements": {"initiative.packaged_themes": true, "initiative.customization": true, "initiative.theme_slots": 1}},
     {"id": "theme-slot", "name": "Theme slot", "description": "One more theme slot", "billing": "one_off", "repeatable": true, "entitlements": {"initiative.theme_slots": 1}},
+    {"id": "members-10", "name": "Members 10", "description": "Up to 10 members per session", "billing": "recurring", "entitlements": {"initiative.members_per_session": {"value": 10, "mode": "at_least"}}},
+    {"id": "members-20", "name": "Members 20", "description": "Up to 20 members per session", "billing": "recurring", "entitlements": {"initiative.members_per_session": {"value": 20, "mode": "at_least"}}},
     {"id": "game-systems", "name": "Game systems", "description": "Additional game systems", "billing": "one_off", "entitlements": {"initiative.game_systems_extra": true}}
   ]
 }

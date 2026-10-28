@@ -244,3 +244,31 @@ func TestProductCheckoutOverHTTPAndMaximumRefusal(t *testing.T) {
 	}
 	mustCode(t, do(r, "POST", "/billing/checkout", userTok, `{"product_id":"slot","tier_id":"x"}`), http.StatusBadRequest)
 }
+
+func TestAdminProductRendersAtLeastEntitlements(t *testing.T) {
+	r, _ := newRouter(t)
+	mustCode(t, do(r, "POST", "/admin/keys", adminTok, `{"key":"a.members","type":"limit"}`), http.StatusCreated)
+	rec := do(r, "POST", "/admin/products", adminTok,
+		`{"id":"m10","name":"M10","billing":"recurring","entitlements":{"a.members":{"value":10,"mode":"at_least"}}}`)
+	mustCode(t, rec, http.StatusCreated)
+	var vo ProductVO
+	_ = json.Unmarshal(rec.Body.Bytes(), &vo)
+	got, _ := vo.Entitlements["a.members"].(map[string]any)
+	if got["value"] != float64(10) || got["mode"] != "at_least" {
+		t.Errorf("entitlements = %+v", vo.Entitlements)
+	}
+	mustCode(t, do(r, "POST", "/admin/products", adminTok,
+		`{"id":"bad","name":"B","billing":"recurring","entitlements":{"a.members":{"value":10,"mode":"nope"}}}`), http.StatusBadRequest)
+}
+
+func TestCheckoutNoIncreaseIs409(t *testing.T) {
+	r, st := newRouter(t)
+	mustCode(t, do(r, "POST", "/admin/keys", adminTok, `{"key":"a.members","type":"limit"}`), http.StatusCreated)
+	adminProduct(t, r, `{"id":"m10","name":"M10","billing":"recurring","stripe_price_id":"price_m","entitlements":{"a.members":{"value":10,"mode":"at_least"}}}`)
+	st.AddGrant(models.Grant{UserID: "canonical-" + userTok, Key: "a.members", Value: 10, Mode: models.ModeAtLeast, Status: models.GrantActive})
+	rec := do(r, "POST", "/billing/checkout", userTok, `{"product_id":"m10"}`)
+	mustCode(t, rec, http.StatusConflict)
+	if !strings.Contains(rec.Body.String(), "no_increase") {
+		t.Errorf("body = %s", rec.Body)
+	}
+}

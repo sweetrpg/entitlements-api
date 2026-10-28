@@ -94,7 +94,9 @@ type Grant struct {
 	// ProductID and Quantity record which product purchase a key-level grant came from. All the
 	// grants of one purchase share ExternalID and are ended or revoked together.
 	ProductID string `bson:"product_id,omitempty"`
-	Quantity  int64  `bson:"quantity,omitempty"`
+	// Mode is ModeAdd or ModeAtLeast for a key-level limit grant; empty means add.
+	Mode     string `bson:"mode,omitempty"`
+	Quantity int64  `bson:"quantity,omitempty"`
 	// Refs are other Stripe object IDs (invoice, payment intent, charge) a refund or dispute
 	// event can name instead of ExternalID.
 	Refs            []string   `bson:"refs,omitempty"`
@@ -109,6 +111,13 @@ func (g Grant) ActiveAt(now time.Time) bool {
 	return g.Status == GrantActive && (g.ValidUntil == nil || g.ValidUntil.After(now))
 }
 
+// Entitlement modes. An add entitlement stacks on top of the user's value; an at_least entitlement
+// is one of several alternatives (a 10-member and a 20-member plan), and the highest wins.
+const (
+	ModeAdd     = "add"
+	ModeAtLeast = "at_least"
+)
+
 // Billing kinds for a product.
 const (
 	BillingOneOff    = "one_off"
@@ -121,7 +130,12 @@ type ProductEntitlement struct {
 	Key   string  `bson:"key"`
 	Type  KeyType `bson:"type"`
 	Value int64   `bson:"value"`
+	// Mode is ModeAdd or ModeAtLeast; empty means add.
+	Mode string `bson:"mode,omitempty"`
 }
+
+// IsAtLeast reports whether the entitlement is an at_least alternative.
+func (e ProductEntitlement) IsAtLeast() bool { return e.Mode == ModeAtLeast }
 
 // Product is what a user buys: one Stripe price that grants one or more entitlements. A product
 // with more than one entitlement is a bundle. Repeatable means it can be bought with a quantity

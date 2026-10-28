@@ -279,3 +279,57 @@ func TestEventForARemovedProductCreatesNothing(t *testing.T) {
 		t.Errorf("grants = %v", got)
 	}
 }
+
+func seedMembersProducts(t *testing.T, cat *catalog.Service) {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := cat.CreateKey(ctx, "admin", catalog.KeyInput{Key: "initiative.members_per_session", Type: models.TypeLimit, Max: i64(20)}); err != nil {
+		t.Fatal(err)
+	}
+	for slug, v := range map[string]float64{"members-10": 10, "members-20": 20} {
+		_, err := cat.CreateProduct(ctx, "admin", catalog.ProductInput{Slug: slug, Name: slug, Billing: models.BillingRecurring, StripePriceID: "price_" + slug,
+			Entitlements: map[string]any{"initiative.members_per_session": map[string]any{"value": v, "mode": "at_least"}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestCheckoutRejectsAnAtLeastProductThatRaisesNothing(t *testing.T) {
+	s, cat, st, gw := productSetup(t)
+	seedMembersProducts(t, cat)
+	ctx := context.Background()
+	st.AddGrant(models.Grant{UserID: "user-3", Key: "initiative.members_per_session", Value: 20, Mode: models.ModeAtLeast, Status: models.GrantActive})
+
+	gw.checkout = CheckoutParams{}
+	var no catalog.NoIncreaseError
+	for _, slug := range []string{"members-10", "members-20"} {
+		if _, err := s.Checkout(ctx, "user-3", "", CheckoutRequest{ProductID: slug}); !errors.As(err, &no) {
+			t.Errorf("%s: err = %v, want no increase", slug, err)
+		}
+	}
+	if gw.checkout.PriceID != "" {
+		t.Error("a Stripe session was created for a purchase that changes nothing")
+	}
+	if _, err := s.Checkout(ctx, "user-4", "", CheckoutRequest{ProductID: "members-10"}); err != nil {
+		t.Errorf("a user at the free value was refused: %v", err)
+	}
+}
+
+func TestAtLeastProductGrantsTheFloorWhateverTheQuantity(t *testing.T) {
+	s, cat, st, _ := productSetup(t)
+	seedMembersProducts(t, cat)
+	ev := loadEvent(t, "product_subscription_checkout.json")
+	ev.ID = "evt_members"
+	ev.Object = []byte(`{"id":"cs_m","mode":"subscription","payment_status":"paid","customer":"cus_9","subscription":"sub_m","client_reference_id":"user-5","metadata":{"user_id":"user-5","product_id":"members-10","quantity":"3"}}`)
+	if err := s.HandleEvent(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	g := grantsOf(t, st, models.SourceStripeSubscription, "sub_m")["initiative.members_per_session"]
+	if g.Value != 10 || g.Mode != models.ModeAtLeast {
+		t.Errorf("grant = %+v, want value 10 mode at_least", g)
+	}
+	if v := effective(t, cat, "user-5", "initiative.members_per_session"); v != int64(10) {
+		t.Errorf("effective = %v, want 10", v)
+	}
+}

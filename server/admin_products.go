@@ -25,6 +25,10 @@ type ProductVO struct {
 func toProductVO(p models.Product) ProductVO {
 	ents := make(map[string]any, len(p.Entitlements))
 	for _, e := range p.Entitlements {
+		if e.IsAtLeast() {
+			ents[e.Key] = map[string]any{"value": models.FormatValue(e.Type, e.Value), "mode": models.ModeAtLeast}
+			continue
+		}
 		ents[e.Key] = models.FormatValue(e.Type, e.Value)
 	}
 	return ProductVO{
