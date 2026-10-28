@@ -27,6 +27,7 @@ import (
 	"github.com/sweetrpg/authz-client.go/authz"
 	"github.com/sweetrpg/common.go/logging"
 	"github.com/sweetrpg/common.go/util"
+	"github.com/sweetrpg/entitlements-api/billing"
 	"github.com/sweetrpg/entitlements-api/catalog"
 	"github.com/sweetrpg/entitlements-api/config"
 	"github.com/sweetrpg/entitlements-api/constants"
@@ -105,7 +106,10 @@ func main() {
 	r.Use(ratelimit.Middleware(redisPool, ratelimit.DefaultOptions()))
 
 	authzClient := authz.NewClient(cfg.AuthAPIURL, cfg.UsersAPIURL)
-	server.SetupHandlers(r, catalog.New(store), authzClient, cfg)
+	bill := billing.New(store, billing.NewStripeGateway(cfg.StripeSecretKey), billing.URLs{
+		CheckoutSuccess: cfg.CheckoutSuccessURL, CheckoutCancel: cfg.CheckoutCancelURL, PortalReturn: cfg.PortalReturnURL,
+	})
+	server.SetupHandlers(r, catalog.New(store), bill, authzClient, cfg)
 
 	_ = r.Run(util.GetEnv(apiconstants.BIND_ADDRESS, ":8000"))
 }
