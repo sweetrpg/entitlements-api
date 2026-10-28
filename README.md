@@ -15,8 +15,8 @@ Stripe checkout, billing portal, and webhooks are not implemented yet.
 
 | Route | Auth | Purpose |
 | --- | --- | --- |
-| `GET /check?user_id=&key=` | service token | One key's effective value |
-| `POST /check/batch` | service token | `{user_id, keys[]}` or `{user_id, prefix}` |
+| `GET /check?key=` | user token | The caller's effective value for one key |
+| `POST /check/batch` | user token | `{keys[]}` or `{prefix}` |
 | `/admin/keys`, `/admin/tiers`, `/admin/default-tier`, `/admin/audit` | admin user token | Catalog writes (audited) and reads |
 | `GET /status/ping`, `GET /status/health` | none | Liveness, dependency check |
 
@@ -26,10 +26,11 @@ whole batch. Usage against a limit is the caller's to count.
 
 ## Auth
 
-- Checks: `Authorization: Bearer <token>` where the token is registered in `SERVICE_TOKENS`
-  (`name=token,name=token`). Anything else is 401.
-- Admin routes: a user bearer token verified by auth-api with the `admin` role; the canonical user
-  ID from users-api is stamped into `created_by`/`updated_by` and the audit trail.
+Zero trust: every call carries the end user's own bearer token. auth-api verifies it against Auth0
+and users-api resolves the canonical user ID (`authz-client.go`); the answer is always about that
+verified user, and no user ID is accepted in the request. A consuming service forwards the token
+it received. Admin routes additionally require the `admin` role, and the admin's canonical ID is
+stamped into `created_by`/`updated_by` and the audit trail. There are no service credentials.
 
 ## Data
 

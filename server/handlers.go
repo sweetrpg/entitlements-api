@@ -10,6 +10,6 @@ import (
 // SetupHandlers wires every route.
 func SetupHandlers(g *gin.Engine, svc *catalog.Service, authzClient *authz.Client, cfg *config.Config) {
 	setupAdminHandlers(g, svc, authzClient)
-	setupCheckHandlers(g, svc, cfg.ServiceTokens)
+	setupCheckHandlers(g, svc, authzClient)
 	setupStatusHandlers(g)
 }
