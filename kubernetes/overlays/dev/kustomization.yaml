@@ -1,0 +1,31 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sweetrpg-entitlements
+
+resources:
+  - ../../base
+  - atlas-db-user.yaml
+  - configmaps.yaml
+  - ingress.yaml
+  - middlewares.yaml
+  - pod-monitor.yaml
+  - secrets/cache.yaml
+  - secrets/db.yaml
+  - secrets/db-creds.yaml
+  - secrets/misc.yaml
+  - secrets/stripe.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/name: entitlements-api
+      app.kubernetes.io/version: v1
+      app.kubernetes.io/component: api
+      app.kubernetes.io/part-of: entitlements
+      com.sweetrpg/env: dev
+    includeSelectors: false
+    includeTemplates: true
+
+generatorOptions:
+  disableNameSuffixHash: true
