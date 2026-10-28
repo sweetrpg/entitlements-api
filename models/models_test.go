@@ -79,3 +79,24 @@ func TestGrantActiveAt(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateMax(t *testing.T) {
+	five, zero := int64(5), int64(0)
+	cases := []struct {
+		name string
+		typ  KeyType
+		max  *int64
+		ok   bool
+	}{
+		{"none on limit", TypeLimit, nil, true},
+		{"none on flag", TypeFlag, nil, true},
+		{"positive on limit", TypeLimit, &five, true},
+		{"on flag", TypeFlag, &five, false},
+		{"zero", TypeLimit, &zero, false},
+	}
+	for _, c := range cases {
+		if err := ValidateMax(c.typ, c.max); (err == nil) != c.ok {
+			t.Errorf("%s: err = %v", c.name, err)
+		}
+	}
+}

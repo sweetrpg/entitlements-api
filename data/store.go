@@ -29,7 +29,7 @@ type Store interface {
 	GetKeys(ctx context.Context, names []string) ([]models.Key, error)
 	// ListKeys returns live keys whose name starts with prefix, ordered by name.
 	ListKeys(ctx context.Context, prefix string, limit, skip int64) ([]models.Key, error)
-	UpdateKey(ctx context.Context, name, description string, ttlSeconds int, actor string) (*models.Key, error)
+	UpdateKey(ctx context.Context, name, description string, ttlSeconds int, max *int64, actor string) (*models.Key, error)
 	DeleteKey(ctx context.Context, name, actor string) error
 
 	InsertTier(ctx context.Context, t *models.Tier, actor string) error
@@ -45,11 +45,18 @@ type Store interface {
 	// ActiveGrants returns the user's grants that count at now.
 	ActiveGrants(ctx context.Context, userID string, now time.Time) ([]models.Grant, error)
 
-	// GrantByExternal finds the grant created from one Stripe object; ErrNotFound if none.
-	GrantByExternal(ctx context.Context, source, externalID string) (*models.Grant, error)
+	InsertProduct(ctx context.Context, p *models.Product, actor string) error
+	GetProducts(ctx context.Context, slugs []string) ([]models.Product, error)
+	ListProducts(ctx context.Context, limit, skip int64) ([]models.Product, error)
+	UpdateProduct(ctx context.Context, p *models.Product, actor string) (*models.Product, error)
+	DeleteProduct(ctx context.Context, slug, actor string) error
+
+	// GrantsByExternal returns every grant created from one Stripe object: a tier grant, or one
+	// key-level grant per entitlement of a product purchase.
+	GrantsByExternal(ctx context.Context, source, externalID string) ([]models.Grant, error)
 	// GrantsByRef finds grants whose ExternalID or Refs contain a Stripe object ID.
 	GrantsByRef(ctx context.Context, ref string) ([]models.Grant, error)
-	// InsertGrant returns ErrDuplicate when (source, external_id) already has a grant.
+	// InsertGrant returns ErrDuplicate when (source, external_id, key) already has a grant.
 	InsertGrant(ctx context.Context, g *models.Grant, actor string) error
 	UpdateGrant(ctx context.Context, g *models.Grant, actor string) error
 

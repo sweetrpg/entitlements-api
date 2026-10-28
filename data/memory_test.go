@@ -37,19 +37,20 @@ func TestInsertGrantStampsAuditFields(t *testing.T) {
 func TestGrantByExternalAndUpdate(t *testing.T) {
 	m := NewMemoryStore()
 	_ = m.InsertGrant(ctx, stripeGrant("sub_1"), "system")
-	g, err := m.GrantByExternal(ctx, models.SourceStripeSubscription, "sub_1")
-	if err != nil {
-		t.Fatal(err)
+	gs, err := m.GrantsByExternal(ctx, models.SourceStripeSubscription, "sub_1")
+	if err != nil || len(gs) != 1 {
+		t.Fatalf("grants = %v err = %v", gs, err)
 	}
+	g := &gs[0]
 	g.Status = models.GrantEnded
 	if err := m.UpdateGrant(ctx, g, "system"); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := m.GrantByExternal(ctx, models.SourceStripeSubscription, "sub_1"); got.Status != models.GrantEnded {
-		t.Errorf("status = %s", got.Status)
+	if got, _ := m.GrantsByExternal(ctx, models.SourceStripeSubscription, "sub_1"); got[0].Status != models.GrantEnded {
+		t.Errorf("status = %s", got[0].Status)
 	}
-	if _, err := m.GrantByExternal(ctx, models.SourceStripePurchase, "sub_1"); !errors.Is(err, ErrNotFound) {
-		t.Errorf("err = %v, want ErrNotFound", err)
+	if got, _ := m.GrantsByExternal(ctx, models.SourceStripePurchase, "sub_1"); len(got) != 0 {
+		t.Errorf("grants for another source = %v", got)
 	}
 	if err := m.UpdateGrant(ctx, stripeGrant("missing"), "system"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("err = %v, want ErrNotFound", err)

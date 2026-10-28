@@ -15,15 +15,26 @@ value for a subject. Platform-wide design is in `sweetrpg/platform`'s PADR-0034
 | --- | --- | --- |
 | `GET /check?key=` | user token | The caller's effective value for one key |
 | `GET /check/batch` | user token | Repeated `?key=a.b&key=a.c`, or `?prefix=initiative.` (exactly one of the two) |
-| `POST /billing/checkout` | user token | `{tier_id}` returns `{url}`, a Stripe Checkout page for the caller |
+| `POST /billing/checkout` | user token | `{tier_id}` or `{product_id, quantity}` returns `{url}`, a Stripe Checkout page for the caller; 409 `exceeds_maximum` (with `units_remaining`) or `in_use` when refused |
 | `POST /billing/portal` | user token | `{url}` for the Stripe billing portal; 404 if the caller never checked out |
 | `POST /webhooks/stripe` | Stripe signature | Public. Verified against the raw body; no user token |
-| `/admin/keys`, `/admin/tiers`, `/admin/default-tier`, `/admin/audit` | admin user token | Catalog writes (audited) and reads |
+| `/admin/keys`, `/admin/tiers`, `/admin/products`, `/admin/default-tier`, `/admin/audit` | admin user token | Catalog writes (audited) and reads |
 | `GET /status/ping`, `GET /status/health` | none | Liveness, dependency check |
 
 Check responses: `{key, type, value, ttl_seconds}` plus `Cache-Control: private, max-age=<ttl>`.
 `value` is a boolean for flags and an integer for limits. An unknown key returns 404 and fails a
 whole batch. A batch with both or neither of `key`/`prefix` returns 400 `invalid_selector`; more than 200 keys returns `too_many_keys`; a prefix over 128 characters returns `prefix_too_long`. Usage against a limit is the caller's to count.
+
+## Resolution
+
+`effective = max(default tier, active tier grants) + sum(active key-level grants)` for a limit
+key. A flag is on when its tier value is on or any key-level grant is active. Tiers are
+alternatives; purchased units (key-level grants) add, and each ends independently.
+
+A limit key can carry a `max` (set through `/admin/keys`, absent means none). Every check clamps
+the effective value to it, so a user never sees more than the maximum. `catalog.CheckPurchase`
+refuses units that would pass it and returns how many remain; the HTTP error is 409
+`exceeds_maximum` with `units_remaining`.
 
 ## Auth
 
@@ -40,6 +51,41 @@ Collections: `entitlement_keys`, `entitlement_tiers`, `entitlement_grants`, `cat
 their unique indexes apply to live documents only. Grants are written by the Stripe webhook handler
 and read for checks. `stripe_customers` maps a user to their Stripe customer; `stripe_events`
 holds processed event IDs.
+
+## Products
+
+A product is one Stripe price that grants one or more entitlements (a key and a value per unit);
+more than one makes it a bundle. `billing` is `one_off` or `recurring`; `repeatable` allows a
+quantity (recurring) or repeat purchases (one-off), otherwise a user holds it once. Products are
+catalog data (`/admin/products`); checkout refuses a product with no Stripe price ID, an unknown
+key, or a quantity that would pass a key's maximum.
+
+A purchase creates one key-level grant per entitlement, valued per-unit value x quantity and
+sharing the purchase's Stripe ID (payment intent, or subscription), so a refund, dispute, or
+cancel ends them together. A subscription quantity change (`customer.subscription.updated`)
+recomputes the grants; if that passes a key's maximum the grant keeps the paid value, a WARN is
+logged, and checks clamp it. Soft-deleting a product does not touch grants already issued.
+
+Upgrade note: grants are unique on `(source, external_id, key)`. `EnsureIndexes` drops the earlier
+`(source, external_id)` index so a bundle's grants can share an ID.
+
+## Seed data
+
+`seed/initiative.json` holds the Initiative keys (types and maxima), the `free` default tier, and
+the products. It is data, reviewed by product, not code. Load it through the admin API with an
+administrator's token:
+
+```bash
+ENTITLEMENTS_API_URL=https://dev.sweetrpg.com/api/1/entitlements \
+ENTITLEMENTS_ADMIN_TOKEN=... \
+go run ./cmd/seed-catalog -dry-run   # drop -dry-run to write
+```
+
+The loader only creates what is missing; an existing row, or an already-set default tier, is left
+alone, so re-running cannot undo an edit or clear a Stripe price ID. Products ship with no
+`stripe_price_id` (checkout rejects them) until test-mode prices exist; set each with
+`PUT /admin/products/:id`. `-file` loads a different seed. Members-per-session tiers above 4 are
+not seeded: their products are not defined yet.
 
 ## Billing
 

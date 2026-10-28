@@ -57,8 +57,9 @@ func newRouter(t *testing.T) (*gin.Engine, *data.MemoryStore) {
 	cfg := &config.Config{}
 	r := gin.New()
 	cfg.StripeWebhookSecret = webhookSecret
-	bill := billing.New(st, fakeStripe{}, billing.URLs{})
-	SetupHandlers(r, catalog.New(st), bill, authz.NewClient(id.URL, id.URL), cfg)
+	cat := catalog.New(st)
+	bill := billing.New(st, fakeStripe{}, cat, billing.URLs{})
+	SetupHandlers(r, cat, bill, authz.NewClient(id.URL, id.URL), cfg)
 	return r, st
 }
 
@@ -208,7 +209,7 @@ func TestBatchCheck(t *testing.T) {
 	mustCode(t, rec, http.StatusOK)
 	var out BatchCheckVO
 	_ = json.Unmarshal(rec.Body.Bytes(), &out)
-	if len(out.Results) != 2 || out.Results[1].Key != "initiative.theme_slots" || out.Results[1].Value != float64(12) {
+	if len(out.Results) != 2 || out.Results[1].Key != "initiative.theme_slots" || out.Results[1].Value != float64(17) {
 		t.Errorf("out = %+v", out)
 	}
 

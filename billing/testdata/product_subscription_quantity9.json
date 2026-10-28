@@ -1,0 +1,1 @@
+{"id":"evt_psub_qty_big","object":"event","type":"customer.subscription.updated","data":{"object":{"id":"sub_p1","object":"subscription","status":"active","metadata":{"user_id":"user-3","product_id":"encounters"},"items":{"data":[{"quantity":9}]}}}}

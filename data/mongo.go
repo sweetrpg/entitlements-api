@@ -33,17 +33,21 @@ func (s *MongoStore) EnsureIndexes(ctx context.Context) error {
 	liveOnly := options.Index().SetUnique(true).
 		SetPartialFilterExpression(bson.D{{Key: "deleted_at", Value: bson.D{{Key: "$exists", Value: false}}}})
 	idx := map[string][]mongo.IndexModel{
-		constants.KeysCollection:  {{Keys: bson.D{{Key: "key", Value: 1}}, Options: liveOnly}},
-		constants.TiersCollection: {{Keys: bson.D{{Key: "slug", Value: 1}}, Options: liveOnly}},
+		constants.KeysCollection:     {{Keys: bson.D{{Key: "key", Value: 1}}, Options: liveOnly}},
+		constants.TiersCollection:    {{Keys: bson.D{{Key: "slug", Value: 1}}, Options: liveOnly}},
+		constants.ProductsCollection: {{Keys: bson.D{{Key: "slug", Value: 1}}, Options: liveOnly}},
 		constants.GrantsCollection: {
 			{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "status", Value: 1}}},
-			{Keys: bson.D{{Key: "source", Value: 1}, {Key: "external_id", Value: 1}}, Options: options.Index().SetUnique(true).
+			{Keys: bson.D{{Key: "source", Value: 1}, {Key: "external_id", Value: 1}, {Key: "key", Value: 1}}, Options: options.Index().SetUnique(true).
 				SetPartialFilterExpression(bson.D{{Key: "external_id", Value: bson.D{{Key: "$exists", Value: true}}}})},
 			{Keys: bson.D{{Key: "refs", Value: 1}}},
 		},
 		constants.StripeCustomersCollection: {{Keys: bson.D{{Key: "user_id", Value: 1}}, Options: options.Index().SetUnique(true)}},
 		constants.AuditCollection:           {{Keys: bson.D{{Key: "at", Value: -1}}}},
 	}
+	// The first grants index was unique on (source, external_id) alone, which would block a
+	// bundle's several grants sharing one external ID. Drop it; a missing index is not an error.
+	_, _ = s.db.Collection(constants.GrantsCollection).Indexes().DropOne(ctx, "source_1_external_id_1")
 	for coll, ms := range idx {
 		if _, err := s.db.Collection(coll).Indexes().CreateMany(ctx, ms); err != nil {
 			return err
@@ -95,14 +99,21 @@ func (s *MongoStore) ListKeys(ctx context.Context, prefix string, limit, skip in
 	return find[models.Key](ctx, s.db.Collection(constants.KeysCollection), f, page("key", 1, limit, skip))
 }
 
-func (s *MongoStore) UpdateKey(ctx context.Context, name, description string, ttl int, actor string) (*models.Key, error) {
+func (s *MongoStore) UpdateKey(ctx context.Context, name, description string, ttl int, max *int64, actor string) (*models.Key, error) {
 	set := bson.D{
 		{Key: "description", Value: description}, {Key: "ttl_seconds", Value: ttl},
 		{Key: "updated_at", Value: time.Now().UTC()}, {Key: "updated_by", Value: actor},
 	}
+	update := bson.D{{Key: "$set", Value: set}}
+	if max == nil {
+		update = append(update, bson.E{Key: "$unset", Value: bson.D{{Key: "max", Value: ""}}})
+	} else {
+		set = append(set, bson.E{Key: "max", Value: *max})
+		update = bson.D{{Key: "$set", Value: set}}
+	}
 	var out models.Key
 	err := s.db.Collection(constants.KeysCollection).
-		FindOneAndUpdate(ctx, bson.D{notDeleted, {Key: "key", Value: name}}, bson.D{{Key: "$set", Value: set}},
+		FindOneAndUpdate(ctx, bson.D{notDeleted, {Key: "key", Value: name}}, update,
 			options.FindOneAndUpdate().SetReturnDocument(options.After)).Decode(&out)
 	return &out, mapNoDoc(err)
 }
@@ -154,6 +165,38 @@ func (s *MongoStore) DeleteTier(ctx context.Context, slug, actor string) error {
 	return s.softDelete(ctx, constants.TiersCollection, bson.D{notDeleted, {Key: "slug", Value: slug}}, actor)
 }
 
+func (s *MongoStore) InsertProduct(ctx context.Context, p *models.Product, actor string) error {
+	mcore.StampCreate(&p.Auditable, actor, time.Now().UTC())
+	return s.insert(ctx, constants.ProductsCollection, p)
+}
+
+func (s *MongoStore) GetProducts(ctx context.Context, slugs []string) ([]models.Product, error) {
+	f := bson.D{notDeleted, {Key: "slug", Value: bson.D{{Key: "$in", Value: slugs}}}}
+	return find[models.Product](ctx, s.db.Collection(constants.ProductsCollection), f, nil)
+}
+
+func (s *MongoStore) ListProducts(ctx context.Context, limit, skip int64) ([]models.Product, error) {
+	return find[models.Product](ctx, s.db.Collection(constants.ProductsCollection), bson.D{notDeleted}, page("slug", 1, limit, skip))
+}
+
+func (s *MongoStore) UpdateProduct(ctx context.Context, p *models.Product, actor string) (*models.Product, error) {
+	set := bson.D{
+		{Key: "name", Value: p.Name}, {Key: "description", Value: p.Description},
+		{Key: "billing", Value: p.Billing}, {Key: "repeatable", Value: p.Repeatable},
+		{Key: "stripe_price_id", Value: p.StripePriceID}, {Key: "entitlements", Value: p.Entitlements},
+		{Key: "updated_at", Value: time.Now().UTC()}, {Key: "updated_by", Value: actor},
+	}
+	var out models.Product
+	err := s.db.Collection(constants.ProductsCollection).
+		FindOneAndUpdate(ctx, bson.D{notDeleted, {Key: "slug", Value: p.Slug}}, bson.D{{Key: "$set", Value: set}},
+			options.FindOneAndUpdate().SetReturnDocument(options.After)).Decode(&out)
+	return &out, mapNoDoc(err)
+}
+
+func (s *MongoStore) DeleteProduct(ctx context.Context, slug, actor string) error {
+	return s.softDelete(ctx, constants.ProductsCollection, bson.D{notDeleted, {Key: "slug", Value: slug}}, actor)
+}
+
 func (s *MongoStore) DefaultTierID(ctx context.Context) (string, error) {
 	var cfg models.CatalogConfig
 	err := s.db.Collection(constants.CatalogConfigCollection).
@@ -192,11 +235,9 @@ func (s *MongoStore) ActiveGrants(ctx context.Context, userID string, now time.T
 	return find[models.Grant](ctx, s.db.Collection(constants.GrantsCollection), f, nil)
 }
 
-func (s *MongoStore) GrantByExternal(ctx context.Context, source, externalID string) (*models.Grant, error) {
-	var g models.Grant
-	err := s.db.Collection(constants.GrantsCollection).
-		FindOne(ctx, bson.D{{Key: "source", Value: source}, {Key: "external_id", Value: externalID}}).Decode(&g)
-	return &g, mapNoDoc(err)
+func (s *MongoStore) GrantsByExternal(ctx context.Context, source, externalID string) ([]models.Grant, error) {
+	f := bson.D{{Key: "source", Value: source}, {Key: "external_id", Value: externalID}}
+	return find[models.Grant](ctx, s.db.Collection(constants.GrantsCollection), f, nil)
 }
 
 func (s *MongoStore) GrantsByRef(ctx context.Context, ref string) ([]models.Grant, error) {

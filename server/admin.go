@@ -35,6 +35,7 @@ type keyBody struct {
 	Type        models.KeyType `json:"type"`
 	Description string         `json:"description"`
 	TTLSeconds  int            `json:"ttl_seconds"`
+	Max         *int64         `json:"max"`
 }
 
 type tierBody struct {
@@ -78,7 +79,7 @@ func setupAdminHandlers(g *gin.Engine, svc *catalog.Service, client *authz.Clien
 			badRequest(c, "malformed JSON body")
 			return
 		}
-		k, err := svc.CreateKey(c.Request.Context(), authz.Viewer(c), catalog.KeyInput{Key: b.Key, Type: b.Type, Description: b.Description, TTLSeconds: b.TTLSeconds})
+		k, err := svc.CreateKey(c.Request.Context(), authz.Viewer(c), catalog.KeyInput{Key: b.Key, Type: b.Type, Description: b.Description, TTLSeconds: b.TTLSeconds, Max: b.Max})
 		respond(c, http.StatusCreated, k, err)
 	})
 	a.PUT("/keys/:key", func(c *gin.Context) {
@@ -87,7 +88,7 @@ func setupAdminHandlers(g *gin.Engine, svc *catalog.Service, client *authz.Clien
 			badRequest(c, "malformed JSON body")
 			return
 		}
-		k, err := svc.UpdateKey(c.Request.Context(), authz.Viewer(c), c.Param("key"), b.Description, b.TTLSeconds)
+		k, err := svc.UpdateKey(c.Request.Context(), authz.Viewer(c), c.Param("key"), b.Description, b.TTLSeconds, b.Max)
 		respond(c, http.StatusOK, k, err)
 	})
 	a.DELETE("/keys/:key", func(c *gin.Context) {
@@ -124,6 +125,8 @@ func setupAdminHandlers(g *gin.Engine, svc *catalog.Service, client *authz.Clien
 	a.DELETE("/tiers/:id", func(c *gin.Context) {
 		respondEmpty(c, svc.DeleteTier(c.Request.Context(), authz.Viewer(c), c.Param("id")))
 	})
+
+	setupAdminProductHandlers(a, svc)
 
 	a.GET("/default-tier", func(c *gin.Context) {
 		id, err := svc.DefaultTier(c.Request.Context())
