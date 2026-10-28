@@ -34,7 +34,7 @@ func loadSeed(t *testing.T, r http.Handler) *seed.Report {
 func TestSeedLoadsThroughTheAdminAPI(t *testing.T) {
 	r, _ := newRouter(t)
 	rep := loadSeed(t, r)
-	if len(rep.Created) != 10+1+1+7 || len(rep.Existing) != 0 {
+	if len(rep.Created) != 10+1+1+9 || len(rep.Existing) != 0 {
 		t.Fatalf("report = %+v", rep)
 	}
 
@@ -65,7 +65,7 @@ func TestSeedLoadsThroughTheAdminAPI(t *testing.T) {
 
 	var products []ProductVO
 	_ = json.Unmarshal(do(r, "GET", "/admin/products", adminTok, "").Body.Bytes(), &products)
-	if len(products) != 7 {
+	if len(products) != 9 {
 		t.Errorf("products = %d", len(products))
 	}
 }
@@ -77,7 +77,7 @@ func TestSeedReloadChangesNothing(t *testing.T) {
 		`{"name":"Themes","billing":"one_off","stripe_price_id":"price_live","entitlements":{"initiative.customization":true}}`), http.StatusOK)
 
 	rep := loadSeed(t, r)
-	if len(rep.Created) != 0 || len(rep.Existing) != 10+1+1+7 {
+	if len(rep.Created) != 0 || len(rep.Existing) != 10+1+1+9 {
 		t.Fatalf("report = %+v", rep)
 	}
 	var products []ProductVO

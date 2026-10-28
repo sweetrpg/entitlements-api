@@ -27,7 +27,11 @@ func (s *Service) buildEntitlements(ctx context.Context, raw map[string]any) ([]
 	if len(raw) == 0 {
 		return nil, fmt.Errorf("%w: a product needs at least one entitlement", models.ErrInvalid)
 	}
-	values, err := s.buildValues(ctx, raw)
+	plain, modes, err := splitModes(raw)
+	if err != nil {
+		return nil, err
+	}
+	values, err := s.buildValues(ctx, plain)
 	if err != nil {
 		return nil, err
 	}
@@ -36,9 +40,35 @@ func (s *Service) buildEntitlements(ctx context.Context, raw map[string]any) ([]
 		if v.Value < 1 {
 			return nil, fmt.Errorf("%w: entitlement %q must grant at least 1", models.ErrInvalid, v.Key)
 		}
-		out[i] = models.ProductEntitlement(v)
+		out[i] = models.ProductEntitlement{Key: v.Key, Type: v.Type, Value: v.Value, Mode: modes[v.Key]}
+		if out[i].Mode == models.ModeAtLeast && v.Type != models.TypeLimit {
+			return nil, fmt.Errorf("%w: at_least applies only to limit keys (%q)", models.ErrInvalid, v.Key)
+		}
 	}
 	return out, nil
+}
+
+// splitModes separates each entitlement's value from its mode. An entitlement is either a bare
+// value (mode add) or {"value": v, "mode": "add"|"at_least"}.
+func splitModes(raw map[string]any) (map[string]any, map[string]string, error) {
+	plain := make(map[string]any, len(raw))
+	modes := make(map[string]string, len(raw))
+	for k, v := range raw {
+		obj, isObj := v.(map[string]any)
+		if !isObj {
+			plain[k], modes[k] = v, models.ModeAdd
+			continue
+		}
+		mode, _ := obj["mode"].(string)
+		if mode == "" {
+			mode = models.ModeAdd
+		}
+		if mode != models.ModeAdd && mode != models.ModeAtLeast {
+			return nil, nil, fmt.Errorf("%w: mode for %q must be add or at_least", models.ErrInvalid, k)
+		}
+		plain[k], modes[k] = obj["value"], mode
+	}
+	return plain, modes, nil
 }
 
 func (s *Service) productFromInput(ctx context.Context, in ProductInput) (*models.Product, error) {

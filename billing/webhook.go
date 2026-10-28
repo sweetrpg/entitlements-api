@@ -190,7 +190,7 @@ func (s *Service) wanted(ctx context.Context, p purchase) ([]models.Grant, error
 		out := make([]models.Grant, 0, len(products[0].Entitlements))
 		for _, e := range products[0].Entitlements {
 			g := base
-			g.Key, g.Value, g.ProductID, g.Quantity = e.Key, grantValue(e, p.quantity), p.productID, p.quantity
+			g.Key, g.Value, g.ProductID, g.Quantity, g.Mode = e.Key, grantValue(e, p.quantity), p.productID, p.quantity, e.Mode
 			out = append(out, g)
 		}
 		return out, nil
@@ -202,9 +202,14 @@ func (s *Service) wanted(ctx context.Context, p purchase) ([]models.Grant, error
 	return nil, nil
 }
 
+// grantValue is what one purchase grants: a flag is on, an at_least floor is the same whatever the
+// quantity, and an add entitlement is its value per unit x quantity.
 func grantValue(e models.ProductEntitlement, quantity int64) int64 {
 	if e.Type == models.TypeFlag {
 		return 1
+	}
+	if e.IsAtLeast() {
+		return e.Value
 	}
 	return e.Value * quantity
 }

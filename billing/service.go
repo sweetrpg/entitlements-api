@@ -22,6 +22,7 @@ type URLs struct {
 // Limits is the part of the catalog service billing needs: the per-key maximum check.
 type Limits interface {
 	CheckPurchase(ctx context.Context, userID string, adds []catalog.Units) error
+	CheckRaise(ctx context.Context, userID string, ents []models.ProductEntitlement) error
 }
 
 // Service starts Stripe sessions and turns Stripe events into grants.
@@ -107,11 +108,14 @@ func (s *Service) productParams(ctx context.Context, userID string, req Checkout
 	}
 	adds := make([]catalog.Units, 0, len(prod.Entitlements))
 	for _, e := range prod.Entitlements {
-		if e.Type == models.TypeLimit {
+		if e.Type == models.TypeLimit && !e.IsAtLeast() {
 			adds = append(adds, catalog.Units{Key: e.Key, Units: e.Value * qty})
 		}
 	}
 	if err := s.limits.CheckPurchase(ctx, userID, adds); err != nil {
+		return err
+	}
+	if err := s.limits.CheckRaise(ctx, userID, prod.Entitlements); err != nil {
 		return err
 	}
 	p.PriceID, p.ProductID, p.Quantity = prod.StripePriceID, prod.Slug, qty
