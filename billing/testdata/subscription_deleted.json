@@ -1,0 +1,1 @@
+{"id":"evt_sub_del","object":"event","type":"customer.subscription.deleted","data":{"object":{"id":"sub_1","object":"subscription","status":"canceled"}}}

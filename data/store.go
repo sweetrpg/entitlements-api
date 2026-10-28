@@ -45,6 +45,23 @@ type Store interface {
 	// ActiveGrants returns the user's grants that count at now.
 	ActiveGrants(ctx context.Context, userID string, now time.Time) ([]models.Grant, error)
 
+	// GrantByExternal finds the grant created from one Stripe object; ErrNotFound if none.
+	GrantByExternal(ctx context.Context, source, externalID string) (*models.Grant, error)
+	// GrantsByRef finds grants whose ExternalID or Refs contain a Stripe object ID.
+	GrantsByRef(ctx context.Context, ref string) ([]models.Grant, error)
+	// InsertGrant returns ErrDuplicate when (source, external_id) already has a grant.
+	InsertGrant(ctx context.Context, g *models.Grant, actor string) error
+	UpdateGrant(ctx context.Context, g *models.Grant, actor string) error
+
+	// StripeCustomer returns "" when the user has no customer record.
+	StripeCustomer(ctx context.Context, userID string) (string, error)
+	SaveStripeCustomer(ctx context.Context, userID, customerID, actor string) error
+
+	// EventProcessed and RecordEvent make webhook handling idempotent by Stripe event ID.
+	// RecordEvent on an already-recorded ID is not an error.
+	EventProcessed(ctx context.Context, eventID string) (bool, error)
+	RecordEvent(ctx context.Context, eventID, eventType string, at time.Time) error
+
 	AppendAudit(ctx context.Context, e models.AuditEntry) error
 	// ListAudit returns entries newest first.
 	ListAudit(ctx context.Context, limit, skip int64) ([]models.AuditEntry, error)
