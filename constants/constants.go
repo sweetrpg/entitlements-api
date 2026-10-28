@@ -12,10 +12,6 @@ const (
 	// USERS_API_URL is users-api's base URL, used to resolve an admin's canonical user ID for
 	// audit stamping.
 	USERS_API_URL = "USERS_API_URL"
-
-	// SERVICE_TOKENS registers the services allowed to call the check endpoints, as
-	// comma-separated name=token pairs. It comes from the platform secret store.
-	SERVICE_TOKENS = "SERVICE_TOKENS"
 )
 
 // Value constants
