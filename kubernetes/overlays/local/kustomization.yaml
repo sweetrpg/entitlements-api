@@ -1,0 +1,22 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sweetrpg-entitlements
+
+resources:
+  - ../../base
+  - configmaps.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/name: entitlements-api
+      app.kubernetes.io/version: v1
+      app.kubernetes.io/component: api
+      app.kubernetes.io/part-of: entitlements
+      com.sweetrpg/env: local
+    includeSelectors: false
+    includeTemplates: true
+
+generatorOptions:
+  disableNameSuffixHash: true

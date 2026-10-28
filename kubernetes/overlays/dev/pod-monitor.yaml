@@ -1,0 +1,20 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+
+metadata:
+  name: sweetrpg-entitlements-api
+  labels:
+    release: prometheus
+
+spec:
+  podMetricsEndpoints:
+    - port: http
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: entitlements-api
+      app.kubernetes.io/version: v1
+      app.kubernetes.io/component: api
+  namespaceSelector:
+    matchNames:
+      - sweetrpg-entitlements

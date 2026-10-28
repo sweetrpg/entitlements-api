@@ -1,0 +1,75 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: api-v1
+
+spec:
+  replicas: 2
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: entitlements-api
+      app.kubernetes.io/version: v1
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      annotations:
+        reloader.stakater.com/auto: "true"
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8000"
+    spec:
+      serviceAccountName: api
+      enableServiceLinks: false
+      imagePullSecrets:
+        - name: sweetrpg-registry
+      containers:
+        - name: app
+          image: entitlements-api
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: api-common
+            - configMapRef:
+                name: api-env
+            - secretRef:
+                name: api-db
+            - secretRef:
+                name: api-cache
+            # Optional until the Stripe item exists in Akeyless, so the pod starts before billing is wired.
+            - secretRef:
+                name: api-stripe
+                optional: true
+          ports:
+            - containerPort: 8000
+              name: http
+          resources:
+            requests:
+              cpu: "20m"
+              memory: "55Mi"
+            limits:
+              cpu: "1"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /status/ping
+              port: http
+            initialDelaySeconds: 10
+            timeoutSeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            # Shallow ping on purpose: /status/health checks Mongo, and a transient Atlas blip
+            # would otherwise mark every replica NotReady at once (see admin-api's deployment).
+            httpGet:
+              path: /status/ping
+              port: http
+            initialDelaySeconds: 10
+            timeoutSeconds: 10
+            periodSeconds: 10
+      restartPolicy: Always
