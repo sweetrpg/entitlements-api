@@ -34,6 +34,7 @@ const (
 
 	KeysCollection            = "entitlement_keys"
 	TiersCollection           = "entitlement_tiers"
+	ProductsCollection        = "entitlement_products"
 	GrantsCollection          = "entitlement_grants"
 	CatalogConfigCollection   = "catalog_config"
 	AuditCollection           = "catalog_audit"
@@ -51,6 +52,9 @@ const (
 
 	// MaxTTLSeconds caps a key's cache TTL hint.
 	MaxTTLSeconds = 86400
+
+	// MaxPurchaseQuantity caps the quantity of one product in a checkout.
+	MaxPurchaseQuantity = 100
 
 	// MaxWebhookBodyBytes caps a webhook payload read into memory.
 	MaxWebhookBodyBytes = 1 << 20

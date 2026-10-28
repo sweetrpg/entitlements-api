@@ -57,8 +57,9 @@ func newRouter(t *testing.T) (*gin.Engine, *data.MemoryStore) {
 	cfg := &config.Config{}
 	r := gin.New()
 	cfg.StripeWebhookSecret = webhookSecret
-	bill := billing.New(st, fakeStripe{}, billing.URLs{})
-	SetupHandlers(r, catalog.New(st), bill, authz.NewClient(id.URL, id.URL), cfg)
+	cat := catalog.New(st)
+	bill := billing.New(st, fakeStripe{}, cat, billing.URLs{})
+	SetupHandlers(r, cat, bill, authz.NewClient(id.URL, id.URL), cfg)
 	return r, st
 }
 

@@ -126,6 +126,8 @@ func setupAdminHandlers(g *gin.Engine, svc *catalog.Service, client *authz.Clien
 		respondEmpty(c, svc.DeleteTier(c.Request.Context(), authz.Viewer(c), c.Param("id")))
 	})
 
+	setupAdminProductHandlers(a, svc)
+
 	a.GET("/default-tier", func(c *gin.Context) {
 		id, err := svc.DefaultTier(c.Request.Context())
 		respond(c, http.StatusOK, gin.H{"id": id}, err)

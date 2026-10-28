@@ -32,7 +32,8 @@ type invoice struct {
 	} `json:"parent"`
 	Lines struct {
 		Data []struct {
-			Period struct {
+			Quantity int64 `json:"quantity"`
+			Period   struct {
 				End int64 `json:"end"`
 			} `json:"period"`
 		} `json:"data"`
@@ -60,6 +61,14 @@ func (i invoice) details() (subscription string, metadata map[string]string) {
 	return subscription, metadata
 }
 
+// quantity is the first line's quantity, 1 if absent.
+func (i invoice) quantity() int64 {
+	if len(i.Lines.Data) > 0 && i.Lines.Data[0].Quantity > 0 {
+		return i.Lines.Data[0].Quantity
+	}
+	return 1
+}
+
 // periodEnd is the latest period end across the invoice's lines, 0 if none.
 func (i invoice) periodEnd() int64 {
 	var end int64
@@ -70,8 +79,22 @@ func (i invoice) periodEnd() int64 {
 }
 
 type subscription struct {
-	ID     string `json:"id"`
-	Status string `json:"status"`
+	ID       string            `json:"id"`
+	Status   string            `json:"status"`
+	Metadata map[string]string `json:"metadata"`
+	Items    struct {
+		Data []struct {
+			Quantity int64 `json:"quantity"`
+		} `json:"data"`
+	} `json:"items"`
+}
+
+// quantity is the first line item's quantity, 0 if there is none.
+func (s subscription) quantity() int64 {
+	if len(s.Items.Data) == 0 {
+		return 0
+	}
+	return s.Items.Data[0].Quantity
 }
 
 type charge struct {

@@ -1,0 +1,1 @@
+{"id":"evt_pinv","object":"event","type":"invoice.paid","data":{"object":{"id":"in_p1","object":"invoice","subscription_details":{"subscription":"sub_p1","metadata":{"user_id":"user-3","product_id":"encounters","quantity":"2"}},"subscription":"sub_p1","lines":{"data":[{"quantity":2,"period":{"end":1792592000}}]}}}}
