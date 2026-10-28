@@ -11,6 +11,5 @@ jobs:
   prepare:
     uses: sweetrpg/github-actions/.github/workflows/go-prepare-release.yaml@master
     with:
-      # 0 until an Entitlements project board exists; set to its number once created.
-      project-number: 0
+      project-number: 21
     secrets: inherit
