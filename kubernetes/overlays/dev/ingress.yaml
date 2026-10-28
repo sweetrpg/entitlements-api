@@ -31,8 +31,8 @@ spec:
                 name: api-v1
                 port:
                   name: http
-          # TODO(stripe-billing): the Stripe webhook route is not implemented yet. When it is, it
-          # must be exposed here and excluded from user-token auth (tasks.md 1.4).
+          # POST /webhooks/stripe is served under both prefixes above. It is the one public
+          # route: the service authenticates it by Stripe signature, not a user token.
   tls:
     - hosts:
         - dev.sweetrpg.com

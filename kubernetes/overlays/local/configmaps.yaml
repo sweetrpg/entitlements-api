@@ -11,3 +11,7 @@ data:
   USERS_API_URL: http://api-v1.sweetrpg-users.svc.cluster.local:8000
   REDIS_HOST: cache.sweetrpg-entitlements.svc.cluster.local
   REDIS_PORT: "6379"
+  # Landing page until billing pages exist in a frontend.
+  STRIPE_CHECKOUT_SUCCESS_URL: http://sweetrpg.local/
+  STRIPE_CHECKOUT_CANCEL_URL: http://sweetrpg.local/
+  STRIPE_PORTAL_RETURN_URL: http://sweetrpg.local/

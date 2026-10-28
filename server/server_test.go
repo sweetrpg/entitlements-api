@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sweetrpg/authz-client.go/authz"
 	"github.com/sweetrpg/common.go/logging"
+	"github.com/sweetrpg/entitlements-api/billing"
 	"github.com/sweetrpg/entitlements-api/catalog"
 	"github.com/sweetrpg/entitlements-api/config"
 	"github.com/sweetrpg/entitlements-api/data"
@@ -17,8 +18,9 @@ import (
 )
 
 const (
-	adminTok = "admin-user-token"
-	userTok  = "plain-user-token"
+	webhookSecret = "whsec_test_secret"
+	adminTok      = "admin-user-token"
+	userTok       = "plain-user-token"
 )
 
 // identityStub stands in for auth-api's /authz/check and users-api's /profile.
@@ -52,7 +54,9 @@ func newRouter(t *testing.T) (*gin.Engine, *data.MemoryStore) {
 	id := identityStub(t)
 	cfg := &config.Config{}
 	r := gin.New()
-	SetupHandlers(r, catalog.New(st), authz.NewClient(id.URL, id.URL), cfg)
+	cfg.StripeWebhookSecret = webhookSecret
+	bill := billing.New(st, fakeStripe{}, billing.URLs{})
+	SetupHandlers(r, catalog.New(st), bill, authz.NewClient(id.URL, id.URL), cfg)
 	return r, st
 }
 
