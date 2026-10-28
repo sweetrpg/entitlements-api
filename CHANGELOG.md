@@ -1,3 +1,15 @@
+## [0.3.0] - 2026-10-28
+
+### 🚀 Features
+
+- *(checks)* Add key-level grants to the tier value
+- *(catalog)* Add a per-key maximum on limit keys
+- *(catalog)* Add purchasable products
+- *(seed)* Add the Initiative catalog seed and a loader
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Merge master into develop after v0.2.1
 ## [0.2.1] - 2026-10-28
 
 ### 🐛 Bug Fixes
