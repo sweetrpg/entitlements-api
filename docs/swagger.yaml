@@ -1,4 +1,36 @@
 definitions:
+  models.KeyType:
+    enum:
+    - flag
+    - limit
+    type: string
+    x-enum-varnames:
+    - TypeFlag
+    - TypeLimit
+  server.BatchCheckVO:
+    properties:
+      results:
+        items:
+          $ref: '#/definitions/server.CheckVO'
+        type: array
+    type: object
+  server.CheckVO:
+    properties:
+      key:
+        type: string
+      ttl_seconds:
+        type: integer
+      type:
+        $ref: '#/definitions/models.KeyType'
+      value: {}
+    type: object
+  vo.ErrorVO:
+    properties:
+      error:
+        type: string
+      message:
+        type: string
+    type: object
   vo.HealthResponseVO:
     properties:
       collections:
@@ -36,6 +68,76 @@ info:
   title: Entitlements API service
   version: "1.0"
 paths:
+  /check:
+    get:
+      description: Effective value for one key for the verified caller. Cacheable
+        for ttl_seconds.
+      parameters:
+      - description: Entitlement key, e.g. initiative.theme_slots
+        in: query
+        name: key
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.CheckVO'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/vo.ErrorVO'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/vo.ErrorVO'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/vo.ErrorVO'
+      summary: Check one key
+      tags:
+      - check
+  /check/batch:
+    get:
+      description: Exactly one of repeated key params or a prefix. An unknown key
+        fails the whole batch with 404.
+      parameters:
+      - collectionFormat: multi
+        description: Entitlement key; repeat for several (max 200)
+        in: query
+        items:
+          type: string
+        name: key
+        type: array
+      - description: Key prefix, e.g. initiative. (max 128 characters)
+        in: query
+        name: prefix
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.BatchCheckVO'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/vo.ErrorVO'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/vo.ErrorVO'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/vo.ErrorVO'
+      summary: Check several keys
+      tags:
+      - check
   /status/health:
     get:
       description: Health check
