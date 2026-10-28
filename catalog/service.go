@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sweetrpg/common.go/logging"
 	"github.com/sweetrpg/entitlements-api/constants"
 	"github.com/sweetrpg/entitlements-api/data"
 	"github.com/sweetrpg/entitlements-api/models"
@@ -56,12 +57,18 @@ func validateTTL(ttl int) error {
 	return nil
 }
 
-// audit appends the trail entry after a successful write. A failure here is returned so the
-// caller knows the change is not recorded; the write itself is already persisted.
+// audit appends the trail entry after a successful write. The write and the entry are not one
+// transaction: if the append fails the change is already persisted, so the failure is logged at
+// ERROR and the write still reports success. Upgrade path: wrap both in a Mongo transaction if
+// lost entries ever matter.
 func (s *Service) audit(ctx context.Context, actor, action, kind, subject string, before, after any) error {
-	return s.store.AppendAudit(ctx, models.AuditEntry{
+	err := s.store.AppendAudit(ctx, models.AuditEntry{
 		At: s.now().UTC(), Actor: actor, Action: action, Kind: kind, Subject: subject, Before: before, After: after,
 	})
+	if err != nil {
+		logging.Logger.Error("catalog audit entry not recorded", "action", action, "kind", kind, "subject", subject, "actor", actor, "error", err.Error())
+	}
+	return nil
 }
 
 // CreateKey registers a key. A live key with the same name is rejected.

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sweetrpg/common.go/logging"
 	"github.com/sweetrpg/entitlements-api/data"
 	"github.com/sweetrpg/entitlements-api/models"
 )
@@ -267,5 +268,22 @@ func TestCheckPrefix(t *testing.T) {
 	r, err := s.CheckPrefix(ctx, "u1", "initiative.")
 	if err != nil || len(r) != 2 || r[0].Key != "initiative.deluxe" || r[1].Key != "initiative.theme_slots" {
 		t.Errorf("r = %+v err = %v", r, err)
+	}
+}
+
+type failingAudit struct{ *data.MemoryStore }
+
+func (failingAudit) AppendAudit(context.Context, models.AuditEntry) error {
+	return errors.New("db down")
+}
+
+func TestAuditFailureDoesNotFailTheWrite(t *testing.T) {
+	logging.Init()
+	s := New(failingAudit{data.NewMemoryStore()})
+	if _, err := s.CreateKey(ctx, "admin", KeyInput{Key: "a.b", Type: models.TypeFlag}); err != nil {
+		t.Errorf("err = %v", err)
+	}
+	if keys, _ := s.ListKeys(ctx, "", 10, 0); len(keys) != 1 {
+		t.Errorf("keys = %d", len(keys))
 	}
 }

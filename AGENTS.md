@@ -47,3 +47,14 @@ go build ./...
 go vet ./...
 go test -race ./...
 ```
+
+## Service Notes
+
+- **Service credentials (follow-up):** `/check` callers authenticate with a bearer token listed
+  in `SERVICE_TOKENS` (`name=token,...`). The platform has no service-credential standard yet;
+  this env registry is the interim mechanism, with the value supplied by an ExternalSecret. Revisit
+  when a platform-wide service identity exists.
+- **Audit:** catalog writes and their audit entry are not one transaction. A failed audit append
+  is logged at ERROR and the write still succeeds.
+- **Delete strategy:** catalog keys and tiers are soft-deleted; the audit collection is
+  append-only. Grants are written by the billing flow, read-only here.
