@@ -63,9 +63,9 @@
 				
 				<option value="file3">github.com/sweetrpg/entitlements-api/billing/webhook.go (86.4%)</option>
 				
-				<option value="file4">github.com/sweetrpg/entitlements-api/catalog/check.go (88.5%)</option>
+				<option value="file4">github.com/sweetrpg/entitlements-api/catalog/check.go (89.1%)</option>
 				
-				<option value="file5">github.com/sweetrpg/entitlements-api/catalog/resolve.go (93.8%)</option>
+				<option value="file5">github.com/sweetrpg/entitlements-api/catalog/resolve.go (96.0%)</option>
 				
 				<option value="file6">github.com/sweetrpg/entitlements-api/catalog/service.go (90.1%)</option>
 				
@@ -606,13 +606,13 @@ func (e UnknownKeysError) Error() string <span class="cov0" title="0">{ return f
 
 // Check returns the effective value of each named key for userID, in the order given. Any key
 // missing from the catalog fails the whole call with UnknownKeysError rather than defaulting.
-func (s *Service) Check(ctx context.Context, userID string, names []string) ([]Result, error) <span class="cov9" title="11">{
+func (s *Service) Check(ctx context.Context, userID string, names []string) ([]Result, error) <span class="cov9" title="17">{
         names = dedupe(names)
         keys, err := s.store.GetKeys(ctx, names)
         if err != nil </span><span class="cov0" title="0">{
                 return nil, err
         }</span>
-        <span class="cov9" title="11">return s.resolveKeys(ctx, userID, names, keys)</span>
+        <span class="cov9" title="17">return s.resolveKeys(ctx, userID, names, keys)</span>
 }
 
 // CheckPrefix returns every live key under prefix (up to MaxBatchKeys) with its effective value.
@@ -628,38 +628,42 @@ func (s *Service) CheckPrefix(ctx context.Context, userID, prefix string) ([]Res
         <span class="cov1" title="1">return s.resolveKeys(ctx, userID, names, keys)</span>
 }
 
-func (s *Service) resolveKeys(ctx context.Context, userID string, names []string, keys []models.Key) ([]Result, error) <span class="cov9" title="12">{
+func (s *Service) resolveKeys(ctx context.Context, userID string, names []string, keys []models.Key) ([]Result, error) <span class="cov9" title="18">{
         byName := make(map[string]models.Key, len(keys))
-        for _, k := range keys </span><span class="cov9" title="13">{
+        for _, k := range keys </span><span class="cov9" title="19">{
                 byName[k.Key] = k
         }</span>
-        <span class="cov9" title="12">var unknown []string
-        for _, n := range names </span><span class="cov10" title="14">{
+        <span class="cov9" title="18">var unknown []string
+        for _, n := range names </span><span class="cov10" title="20">{
                 if _, ok := byName[n]; !ok </span><span class="cov1" title="1">{
                         unknown = append(unknown, n)
                 }</span>
         }
-        <span class="cov9" title="12">if len(unknown) &gt; 0 </span><span class="cov1" title="1">{
+        <span class="cov9" title="18">if len(unknown) &gt; 0 </span><span class="cov1" title="1">{
                 return nil, UnknownKeysError{Keys: unknown}
         }</span>
 
-        <span class="cov9" title="11">now := s.now().UTC()
+        <span class="cov9" title="17">now := s.now().UTC()
         grants, err := s.store.ActiveGrants(ctx, userID, now)
         if err != nil </span><span class="cov0" title="0">{
                 return nil, err
         }</span>
-        <span class="cov9" title="11">tiers, err := s.loadTiers(ctx, grants)
+        <span class="cov9" title="17">tiers, err := s.loadTiers(ctx, grants)
         if err != nil </span><span class="cov0" title="0">{
                 return nil, err
         }</span>
 
-        <span class="cov9" title="11">values := Resolve(tiers.def, tiers.granted, grants, now)
+        <span class="cov9" title="17">types := make(map[string]models.KeyType, len(byName))
+        for n, k := range byName </span><span class="cov9" title="18">{
+                types[n] = k.Type
+        }</span>
+        <span class="cov9" title="17">values := Resolve(tiers.def, tiers.granted, grants, types, now)
         out := make([]Result, 0, len(names))
-        for _, n := range names </span><span class="cov9" title="12">{
+        for _, n := range names </span><span class="cov9" title="18">{
                 k := byName[n]
                 out = append(out, Result{Key: n, Type: k.Type, Value: values[n], TTLSeconds: k.TTLSeconds})
         }</span>
-        <span class="cov9" title="11">return out, nil</span>
+        <span class="cov9" title="17">return out, nil</span>
 }
 
 type loadedTiers struct {
@@ -668,45 +672,45 @@ type loadedTiers struct {
 }
 
 // loadTiers fetches the default tier and every tier the grants reference in one query.
-func (s *Service) loadTiers(ctx context.Context, grants []models.Grant) (loadedTiers, error) <span class="cov9" title="11">{
+func (s *Service) loadTiers(ctx context.Context, grants []models.Grant) (loadedTiers, error) <span class="cov9" title="17">{
         defID, err := s.store.DefaultTierID(ctx)
         if err != nil </span><span class="cov0" title="0">{
                 return loadedTiers{}, err
         }</span>
-        <span class="cov9" title="11">ids := []string{}
-        if defID != "" </span><span class="cov8" title="10">{
+        <span class="cov9" title="17">ids := []string{}
+        if defID != "" </span><span class="cov9" title="16">{
                 ids = append(ids, defID)
         }</span>
-        <span class="cov9" title="11">for _, g := range grants </span><span class="cov8" title="9">{
-                if g.TierID != "" &amp;&amp; !slices.Contains(ids, g.TierID) </span><span class="cov5" title="4">{
+        <span class="cov9" title="17">for _, g := range grants </span><span class="cov9" title="18">{
+                if g.TierID != "" &amp;&amp; !slices.Contains(ids, g.TierID) </span><span class="cov5" title="5">{
                         ids = append(ids, g.TierID)
                 }</span>
         }
-        <span class="cov9" title="11">found, err := s.store.GetTiers(ctx, ids)
+        <span class="cov9" title="17">found, err := s.store.GetTiers(ctx, ids)
         if err != nil </span><span class="cov0" title="0">{
                 return loadedTiers{}, err
         }</span>
-        <span class="cov9" title="11">lt := loadedTiers{granted: map[string]models.Tier{}}
-        for _, t := range found </span><span class="cov9" title="13">{
+        <span class="cov9" title="17">lt := loadedTiers{granted: map[string]models.Tier{}}
+        for _, t := range found </span><span class="cov10" title="20">{
                 lt.granted[t.Slug] = t
-                if t.Slug == defID </span><span class="cov8" title="10">{
+                if t.Slug == defID </span><span class="cov9" title="16">{
                         c := t
                         lt.def = &amp;c
                 }</span>
         }
-        <span class="cov9" title="11">return lt, nil</span>
+        <span class="cov9" title="17">return lt, nil</span>
 }
 
-func dedupe(in []string) []string <span class="cov9" title="11">{
+func dedupe(in []string) []string <span class="cov9" title="17">{
         seen := make(map[string]bool, len(in))
         out := make([]string, 0, len(in))
-        for _, s := range in </span><span class="cov9" title="13">{
-                if !seen[s] </span><span class="cov9" title="12">{
+        for _, s := range in </span><span class="cov9" title="19">{
+                if !seen[s] </span><span class="cov9" title="18">{
                         seen[s] = true
                         out = append(out, s)
                 }</span>
         }
-        <span class="cov9" title="11">return out</span>
+        <span class="cov9" title="17">return out</span>
 }
 </pre>
 		
@@ -718,35 +722,56 @@ import (
         "github.com/sweetrpg/entitlements-api/models"
 )
 
-// Resolve returns the maximum value per key across the default tier, the tiers of active tier
-// grants, and active key-level grants. A key with no source is absent from the map (read as
-// zero or false). Grants are re-checked for activity at now so the rule holds for any Store.
-func Resolve(def *models.Tier, tiers map[string]models.Tier, grants []models.Grant, now time.Time) map[string]int64 <span class="cov7" title="11">{
-        out := map[string]int64{}
-        raise := func(key string, v int64) </span><span class="cov10" title="30">{
-                if cur, ok := out[key]; !ok || v &gt; cur </span><span class="cov9" title="27">{
-                        out[key] = v
+// Resolve returns the effective value per key:
+//
+//        effective = max(default tier, active tier grants) + sum(active key-level grants)
+//
+// for a limit key; a flag key is on when its tier-derived value is on or any key-level grant is
+// active. Tiers are alternatives (maximum); purchased units add. types says which keys are
+// flags, any key not listed is treated as a limit. A key with no source is absent from the map
+// (read as zero or false). Grants are re-checked for activity at now so the rule holds for any
+// Store.
+func Resolve(def *models.Tier, tiers map[string]models.Tier, grants []models.Grant, types map[string]models.KeyType, now time.Time) map[string]int64 <span class="cov8" title="17">{
+        tierValue := map[string]int64{}
+        raise := func(key string, v int64) </span><span class="cov10" title="37">{
+                if cur, ok := tierValue[key]; !ok || v &gt; cur </span><span class="cov10" title="37">{
+                        tierValue[key] = v
                 }</span>
         }
-        <span class="cov7" title="11">if def != nil </span><span class="cov7" title="10">{
-                for _, tv := range def.Values </span><span class="cov8" title="19">{
+        <span class="cov8" title="17">if def != nil </span><span class="cov7" title="16">{
+                for _, tv := range def.Values </span><span class="cov9" title="29">{
                         raise(tv.Key, tv.Value)
                 }</span>
         }
-        <span class="cov7" title="11">for _, g := range grants </span><span class="cov6" title="9">{
+        <span class="cov8" title="17">units := map[string]int64{}
+        for _, g := range grants </span><span class="cov8" title="18">{
                 if !g.ActiveAt(now) </span><span class="cov0" title="0">{
                         continue</span>
                 }
-                <span class="cov6" title="9">if g.TierID != "" </span><span class="cov4" title="4">{
-                        for _, tv := range tiers[g.TierID].Values </span><span class="cov5" title="6">{
+                <span class="cov8" title="18">if g.TierID != "" </span><span class="cov5" title="5">{
+                        for _, tv := range tiers[g.TierID].Values </span><span class="cov6" title="8">{
                                 raise(tv.Key, tv.Value)
                         }</span>
                 }
-                <span class="cov6" title="9">if g.Key != "" </span><span class="cov5" title="5">{
-                        raise(g.Key, g.Value)
+                <span class="cov8" title="18">if g.Key == "" </span><span class="cov5" title="5">{
+                        continue</span>
+                }
+                <span class="cov7" title="13">if types[g.Key] == models.TypeFlag </span><span class="cov2" title="2">{
+                        units[g.Key] = 1
+                }</span> else<span class="cov6" title="11"> {
+                        units[g.Key] += g.Value
                 }</span>
         }
-        <span class="cov7" title="11">return out</span>
+
+        <span class="cov8" title="17">out := tierValue
+        for key, add := range units </span><span class="cov5" title="6">{
+                if types[key] == models.TypeFlag </span><span class="cov1" title="1">{
+                        out[key] = max(out[key], add)
+                }</span> else<span class="cov5" title="5"> {
+                        out[key] += add
+                }</span>
+        }
+        <span class="cov8" title="17">return out</span>
 }
 </pre>
 		
@@ -783,7 +808,7 @@ type Service struct {
 }
 
 // New returns a Service over store.
-func New(store data.Store) *Service <span class="cov6" title="18">{ return &amp;Service{store: store, now: time.Now} }</span>
+func New(store data.Store) *Service <span class="cov7" title="21">{ return &amp;Service{store: store, now: time.Now} }</span>
 
 // KeyInput is the writable part of a key.
 type KeyInput struct {
@@ -802,43 +827,43 @@ type TierInput struct {
         StripePriceID string
 }
 
-func validateTTL(ttl int) error <span class="cov8" title="39">{
+func validateTTL(ttl int) error <span class="cov8" title="45">{
         if ttl &lt; 0 || ttl &gt; constants.MaxTTLSeconds </span><span class="cov3" title="3">{
                 return fmt.Errorf("%w: ttl_seconds must be between 0 and %d", models.ErrInvalid, constants.MaxTTLSeconds)
         }</span>
-        <span class="cov8" title="36">return nil</span>
+        <span class="cov8" title="42">return nil</span>
 }
 
 // audit appends the trail entry after a successful write. The write and the entry are not one
 // transaction: if the append fails the change is already persisted, so the failure is logged at
 // ERROR and the write still reports success. Upgrade path: wrap both in a Mongo transaction if
 // lost entries ever matter.
-func (s *Service) audit(ctx context.Context, actor, action, kind, subject string, before, after any) error <span class="cov10" title="80">{
+func (s *Service) audit(ctx context.Context, actor, action, kind, subject string, before, after any) error <span class="cov10" title="96">{
         err := s.store.AppendAudit(ctx, models.AuditEntry{
                 At: s.now().UTC(), Actor: actor, Action: action, Kind: kind, Subject: subject, Before: before, After: after,
         })
         if err != nil </span><span class="cov1" title="1">{
                 logging.Logger.Error("catalog audit entry not recorded", "action", action, "kind", kind, "subject", subject, "actor", actor, "error", err.Error())
         }</span>
-        <span class="cov10" title="80">return nil</span>
+        <span class="cov10" title="96">return nil</span>
 }
 
 // CreateKey registers a key. A live key with the same name is rejected.
-func (s *Service) CreateKey(ctx context.Context, actor string, in KeyInput) (*models.Key, error) <span class="cov8" title="37">{
+func (s *Service) CreateKey(ctx context.Context, actor string, in KeyInput) (*models.Key, error) <span class="cov8" title="43">{
         if err := models.ValidateKeyName(in.Key); err != nil </span><span class="cov1" title="1">{
                 return nil, err
         }</span>
-        <span class="cov8" title="36">if in.Type != models.TypeFlag &amp;&amp; in.Type != models.TypeLimit </span><span class="cov1" title="1">{
+        <span class="cov8" title="42">if in.Type != models.TypeFlag &amp;&amp; in.Type != models.TypeLimit </span><span class="cov1" title="1">{
                 return nil, fmt.Errorf("%w: type must be flag or limit", models.ErrInvalid)
         }</span>
-        <span class="cov8" title="35">if err := validateTTL(in.TTLSeconds); err != nil </span><span class="cov2" title="2">{
+        <span class="cov8" title="41">if err := validateTTL(in.TTLSeconds); err != nil </span><span class="cov2" title="2">{
                 return nil, err
         }</span>
-        <span class="cov8" title="33">k := &amp;models.Key{Key: in.Key, Type: in.Type, Description: in.Description, TTLSeconds: in.TTLSeconds}
+        <span class="cov8" title="39">k := &amp;models.Key{Key: in.Key, Type: in.Type, Description: in.Description, TTLSeconds: in.TTLSeconds}
         if err := s.store.InsertKey(ctx, k, actor); err != nil </span><span class="cov1" title="1">{
                 return nil, err
         }</span>
-        <span class="cov8" title="32">return k, s.audit(ctx, actor, "create", "key", k.Key, nil, k)</span>
+        <span class="cov8" title="38">return k, s.audit(ctx, actor, "create", "key", k.Key, nil, k)</span>
 }
 
 // UpdateKey changes a key's description and TTL. Its type cannot change.
@@ -875,79 +900,79 @@ func (s *Service) ListKeys(ctx context.Context, prefix string, limit, skip int64
 }</span>
 
 // buildValues validates every named key exists and the value matches its type.
-func (s *Service) buildValues(ctx context.Context, raw map[string]any) ([]models.TierValue, error) <span class="cov8" title="33">{
+func (s *Service) buildValues(ctx context.Context, raw map[string]any) ([]models.TierValue, error) <span class="cov8" title="40">{
         names := make([]string, 0, len(raw))
-        for n := range raw </span><span class="cov9" title="57">{
+        for n := range raw </span><span class="cov9" title="70">{
                 names = append(names, n)
         }</span>
-        <span class="cov8" title="33">slices.Sort(names)
+        <span class="cov8" title="40">slices.Sort(names)
         keys, err := s.store.GetKeys(ctx, names)
         if err != nil </span><span class="cov0" title="0">{
                 return nil, err
         }</span>
-        <span class="cov8" title="33">byName := map[string]models.Key{}
-        for _, k := range keys </span><span class="cov9" title="56">{
+        <span class="cov8" title="40">byName := map[string]models.Key{}
+        for _, k := range keys </span><span class="cov9" title="69">{
                 byName[k.Key] = k
         }</span>
-        <span class="cov8" title="33">out := make([]models.TierValue, 0, len(names))
-        for _, n := range names </span><span class="cov9" title="57">{
+        <span class="cov8" title="40">out := make([]models.TierValue, 0, len(names))
+        for _, n := range names </span><span class="cov9" title="70">{
                 k, ok := byName[n]
                 if !ok </span><span class="cov1" title="1">{
                         return nil, fmt.Errorf("%w: unknown key %q", models.ErrInvalid, n)
                 }</span>
-                <span class="cov9" title="56">v, err := models.ParseValue(k.Type, raw[n])
+                <span class="cov9" title="69">v, err := models.ParseValue(k.Type, raw[n])
                 if err != nil </span><span class="cov2" title="2">{
                         return nil, fmt.Errorf("%w (key %q)", err, n)
                 }</span>
-                <span class="cov9" title="54">out = append(out, models.TierValue{Key: n, Type: k.Type, Value: v})</span>
+                <span class="cov9" title="67">out = append(out, models.TierValue{Key: n, Type: k.Type, Value: v})</span>
         }
-        <span class="cov7" title="30">return out, nil</span>
+        <span class="cov8" title="37">return out, nil</span>
 }
 
-func (s *Service) tierFromInput(ctx context.Context, in TierInput) (*models.Tier, error) <span class="cov8" title="35">{
+func (s *Service) tierFromInput(ctx context.Context, in TierInput) (*models.Tier, error) <span class="cov8" title="42">{
         if err := models.ValidateTierSlug(in.Slug); err != nil </span><span class="cov1" title="1">{
                 return nil, err
         }</span>
-        <span class="cov8" title="34">if strings.TrimSpace(in.Name) == "" </span><span class="cov1" title="1">{
+        <span class="cov8" title="41">if strings.TrimSpace(in.Name) == "" </span><span class="cov1" title="1">{
                 return nil, fmt.Errorf("%w: name is required", models.ErrInvalid)
         }</span>
-        <span class="cov8" title="33">values, err := s.buildValues(ctx, in.Values)
+        <span class="cov8" title="40">values, err := s.buildValues(ctx, in.Values)
         if err != nil </span><span class="cov3" title="3">{
                 return nil, err
         }</span>
-        <span class="cov7" title="30">return &amp;models.Tier{Slug: in.Slug, Name: in.Name, Description: in.Description, Values: values, StripePriceID: in.StripePriceID}, nil</span>
+        <span class="cov8" title="37">return &amp;models.Tier{Slug: in.Slug, Name: in.Name, Description: in.Description, Values: values, StripePriceID: in.StripePriceID}, nil</span>
 }
 
 // CreateTier adds a tier.
-func (s *Service) CreateTier(ctx context.Context, actor string, in TierInput) (*models.Tier, error) <span class="cov8" title="32">{
+func (s *Service) CreateTier(ctx context.Context, actor string, in TierInput) (*models.Tier, error) <span class="cov8" title="38">{
         t, err := s.tierFromInput(ctx, in)
         if err != nil </span><span class="cov4" title="5">{
                 return nil, err
         }</span>
-        <span class="cov7" title="27">if err := s.store.InsertTier(ctx, t, actor); err != nil </span><span class="cov1" title="1">{
+        <span class="cov7" title="33">if err := s.store.InsertTier(ctx, t, actor); err != nil </span><span class="cov1" title="1">{
                 return nil, err
         }</span>
-        <span class="cov7" title="26">return t, s.audit(ctx, actor, "create", "tier", t.Slug, nil, t)</span>
+        <span class="cov7" title="32">return t, s.audit(ctx, actor, "create", "tier", t.Slug, nil, t)</span>
 }
 
 // UpdateTier replaces a tier's name, description, values, and Stripe price ID.
-func (s *Service) UpdateTier(ctx context.Context, actor string, in TierInput) (*models.Tier, error) <span class="cov3" title="3">{
+func (s *Service) UpdateTier(ctx context.Context, actor string, in TierInput) (*models.Tier, error) <span class="cov3" title="4">{
         t, err := s.tierFromInput(ctx, in)
         if err != nil </span><span class="cov0" title="0">{
                 return nil, err
         }</span>
-        <span class="cov3" title="3">before, err := s.store.GetTiers(ctx, []string{in.Slug})
+        <span class="cov3" title="4">before, err := s.store.GetTiers(ctx, []string{in.Slug})
         if err != nil </span><span class="cov0" title="0">{
                 return nil, err
         }</span>
-        <span class="cov3" title="3">if len(before) == 0 </span><span class="cov1" title="1">{
+        <span class="cov3" title="4">if len(before) == 0 </span><span class="cov1" title="1">{
                 return nil, ErrNotFound
         }</span>
-        <span class="cov2" title="2">updated, err := s.store.UpdateTier(ctx, t, actor)
+        <span class="cov3" title="3">updated, err := s.store.UpdateTier(ctx, t, actor)
         if err != nil </span><span class="cov0" title="0">{
                 return nil, err
         }</span>
-        <span class="cov2" title="2">return updated, s.audit(ctx, actor, "update", "tier", in.Slug, before[0], updated)</span>
+        <span class="cov3" title="3">return updated, s.audit(ctx, actor, "update", "tier", in.Slug, before[0], updated)</span>
 }
 
 // DeleteTier removes a tier. The default tier cannot be deleted; pick another default first.
@@ -971,22 +996,22 @@ func (s *Service) ListTiers(ctx context.Context, limit, skip int64) ([]models.Ti
 }</span>
 
 // SetDefaultTier makes an existing tier the one every user implicitly holds.
-func (s *Service) SetDefaultTier(ctx context.Context, actor, slug string) error <span class="cov6" title="15">{
+func (s *Service) SetDefaultTier(ctx context.Context, actor, slug string) error <span class="cov6" title="18">{
         tiers, err := s.store.GetTiers(ctx, []string{slug})
         if err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov6" title="15">if len(tiers) == 0 </span><span class="cov1" title="1">{
+        <span class="cov6" title="18">if len(tiers) == 0 </span><span class="cov1" title="1">{
                 return ErrNotFound
         }</span>
-        <span class="cov6" title="14">before, err := s.store.DefaultTierID(ctx)
+        <span class="cov6" title="17">before, err := s.store.DefaultTierID(ctx)
         if err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov6" title="14">if err := s.store.SetDefaultTierID(ctx, slug, actor); err != nil </span><span class="cov0" title="0">{
+        <span class="cov6" title="17">if err := s.store.SetDefaultTierID(ctx, slug, actor); err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov6" title="14">return s.audit(ctx, actor, "set_default", "default_tier", slug, before, slug)</span>
+        <span class="cov6" title="17">return s.audit(ctx, actor, "set_default", "default_tier", slug, before, slug)</span>
 }
 
 // DefaultTier returns the default tier id, or "" when none is configured.
