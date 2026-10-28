@@ -3,7 +3,7 @@ module github.com/sweetrpg/entitlements-api
 go 1.26.5
 
 require (
-	github.com/getsentry/sentry-go v0.49.0
+	github.com/getsentry/sentry-go v0.50.0
 	github.com/gin-contrib/cors v1.7.9
 	github.com/gin-gonic/gin v1.12.0
 	github.com/grafana/pyroscope-go v1.4.3
