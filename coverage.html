@@ -1,0 +1,2038 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>catalog: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/sweetrpg/entitlements-api/catalog/check.go (88.5%)</option>
+				
+				<option value="file1">github.com/sweetrpg/entitlements-api/catalog/resolve.go (93.8%)</option>
+				
+				<option value="file2">github.com/sweetrpg/entitlements-api/catalog/service.go (90.1%)</option>
+				
+				<option value="file3">github.com/sweetrpg/entitlements-api/cmd/entitlements-api/main.go (0.0%)</option>
+				
+				<option value="file4">github.com/sweetrpg/entitlements-api/config/config.go (100.0%)</option>
+				
+				<option value="file5">github.com/sweetrpg/entitlements-api/data/memory.go (0.0%)</option>
+				
+				<option value="file6">github.com/sweetrpg/entitlements-api/data/mongo.go (0.0%)</option>
+				
+				<option value="file7">github.com/sweetrpg/entitlements-api/docs/docs.go (0.0%)</option>
+				
+				<option value="file8">github.com/sweetrpg/entitlements-api/models/models.go (100.0%)</option>
+				
+				<option value="file9">github.com/sweetrpg/entitlements-api/server/admin.go (90.1%)</option>
+				
+				<option value="file10">github.com/sweetrpg/entitlements-api/server/checks.go (100.0%)</option>
+				
+				<option value="file11">github.com/sweetrpg/entitlements-api/server/errors.go (80.0%)</option>
+				
+				<option value="file12">github.com/sweetrpg/entitlements-api/server/handlers.go (100.0%)</option>
+				
+				<option value="file13">github.com/sweetrpg/entitlements-api/server/service_auth.go (100.0%)</option>
+				
+				<option value="file14">github.com/sweetrpg/entitlements-api/server/status.go (54.5%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">no coverage</span>
+				<span class="cov1">low coverage</span>
+				<span class="cov2">*</span>
+				<span class="cov3">*</span>
+				<span class="cov4">*</span>
+				<span class="cov5">*</span>
+				<span class="cov6">*</span>
+				<span class="cov7">*</span>
+				<span class="cov8">*</span>
+				<span class="cov9">*</span>
+				<span class="cov10">high coverage</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package catalog
+
+import (
+        "context"
+        "fmt"
+        "slices"
+
+        "github.com/sweetrpg/entitlements-api/constants"
+        "github.com/sweetrpg/entitlements-api/models"
+)
+
+// Result is one key's effective value for a user. Usage is never included; counting against a
+// limit is the consumer's job.
+type Result struct {
+        Key        string
+        Type       models.KeyType
+        Value      int64
+        TTLSeconds int
+}
+
+// UnknownKeysError lists requested keys that are not in the catalog.
+type UnknownKeysError struct{ Keys []string }
+
+func (e UnknownKeysError) Error() string <span class="cov0" title="0">{ return fmt.Sprintf("unknown keys: %v", e.Keys) }</span>
+
+// Check returns the effective value of each named key for userID, in the order given. Any key
+// missing from the catalog fails the whole call with UnknownKeysError rather than defaulting.
+func (s *Service) Check(ctx context.Context, userID string, names []string) ([]Result, error) <span class="cov9" title="11">{
+        names = dedupe(names)
+        keys, err := s.store.GetKeys(ctx, names)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov9" title="11">return s.resolveKeys(ctx, userID, names, keys)</span>
+}
+
+// CheckPrefix returns every live key under prefix (up to MaxBatchKeys) with its effective value.
+func (s *Service) CheckPrefix(ctx context.Context, userID, prefix string) ([]Result, error) <span class="cov1" title="1">{
+        keys, err := s.store.ListKeys(ctx, prefix, constants.MaxBatchKeys, 0)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov1" title="1">names := make([]string, len(keys))
+        for i, k := range keys </span><span class="cov3" title="2">{
+                names[i] = k.Key
+        }</span>
+        <span class="cov1" title="1">return s.resolveKeys(ctx, userID, names, keys)</span>
+}
+
+func (s *Service) resolveKeys(ctx context.Context, userID string, names []string, keys []models.Key) ([]Result, error) <span class="cov9" title="12">{
+        byName := make(map[string]models.Key, len(keys))
+        for _, k := range keys </span><span class="cov9" title="13">{
+                byName[k.Key] = k
+        }</span>
+        <span class="cov9" title="12">var unknown []string
+        for _, n := range names </span><span class="cov10" title="14">{
+                if _, ok := byName[n]; !ok </span><span class="cov1" title="1">{
+                        unknown = append(unknown, n)
+                }</span>
+        }
+        <span class="cov9" title="12">if len(unknown) &gt; 0 </span><span class="cov1" title="1">{
+                return nil, UnknownKeysError{Keys: unknown}
+        }</span>
+
+        <span class="cov9" title="11">now := s.now().UTC()
+        grants, err := s.store.ActiveGrants(ctx, userID, now)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov9" title="11">tiers, err := s.loadTiers(ctx, grants)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov9" title="11">values := Resolve(tiers.def, tiers.granted, grants, now)
+        out := make([]Result, 0, len(names))
+        for _, n := range names </span><span class="cov9" title="12">{
+                k := byName[n]
+                out = append(out, Result{Key: n, Type: k.Type, Value: values[n], TTLSeconds: k.TTLSeconds})
+        }</span>
+        <span class="cov9" title="11">return out, nil</span>
+}
+
+type loadedTiers struct {
+        def     *models.Tier
+        granted map[string]models.Tier
+}
+
+// loadTiers fetches the default tier and every tier the grants reference in one query.
+func (s *Service) loadTiers(ctx context.Context, grants []models.Grant) (loadedTiers, error) <span class="cov9" title="11">{
+        defID, err := s.store.DefaultTierID(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return loadedTiers{}, err
+        }</span>
+        <span class="cov9" title="11">ids := []string{}
+        if defID != "" </span><span class="cov8" title="10">{
+                ids = append(ids, defID)
+        }</span>
+        <span class="cov9" title="11">for _, g := range grants </span><span class="cov8" title="9">{
+                if g.TierID != "" &amp;&amp; !slices.Contains(ids, g.TierID) </span><span class="cov5" title="4">{
+                        ids = append(ids, g.TierID)
+                }</span>
+        }
+        <span class="cov9" title="11">found, err := s.store.GetTiers(ctx, ids)
+        if err != nil </span><span class="cov0" title="0">{
+                return loadedTiers{}, err
+        }</span>
+        <span class="cov9" title="11">lt := loadedTiers{granted: map[string]models.Tier{}}
+        for _, t := range found </span><span class="cov9" title="13">{
+                lt.granted[t.Slug] = t
+                if t.Slug == defID </span><span class="cov8" title="10">{
+                        c := t
+                        lt.def = &amp;c
+                }</span>
+        }
+        <span class="cov9" title="11">return lt, nil</span>
+}
+
+func dedupe(in []string) []string <span class="cov9" title="11">{
+        seen := make(map[string]bool, len(in))
+        out := make([]string, 0, len(in))
+        for _, s := range in </span><span class="cov9" title="13">{
+                if !seen[s] </span><span class="cov9" title="12">{
+                        seen[s] = true
+                        out = append(out, s)
+                }</span>
+        }
+        <span class="cov9" title="11">return out</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package catalog
+
+import (
+        "time"
+
+        "github.com/sweetrpg/entitlements-api/models"
+)
+
+// Resolve returns the maximum value per key across the default tier, the tiers of active tier
+// grants, and active key-level grants. A key with no source is absent from the map (read as
+// zero or false). Grants are re-checked for activity at now so the rule holds for any Store.
+func Resolve(def *models.Tier, tiers map[string]models.Tier, grants []models.Grant, now time.Time) map[string]int64 <span class="cov7" title="11">{
+        out := map[string]int64{}
+        raise := func(key string, v int64) </span><span class="cov10" title="30">{
+                if cur, ok := out[key]; !ok || v &gt; cur </span><span class="cov9" title="27">{
+                        out[key] = v
+                }</span>
+        }
+        <span class="cov7" title="11">if def != nil </span><span class="cov7" title="10">{
+                for _, tv := range def.Values </span><span class="cov8" title="19">{
+                        raise(tv.Key, tv.Value)
+                }</span>
+        }
+        <span class="cov7" title="11">for _, g := range grants </span><span class="cov6" title="9">{
+                if !g.ActiveAt(now) </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+                <span class="cov6" title="9">if g.TierID != "" </span><span class="cov4" title="4">{
+                        for _, tv := range tiers[g.TierID].Values </span><span class="cov5" title="6">{
+                                raise(tv.Key, tv.Value)
+                        }</span>
+                }
+                <span class="cov6" title="9">if g.Key != "" </span><span class="cov5" title="5">{
+                        raise(g.Key, g.Value)
+                }</span>
+        }
+        <span class="cov7" title="11">return out</span>
+}
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">// Package catalog holds the entitlements business rules: admin-only catalog writes with an audit
+// trail, and effective-value resolution for checks.
+package catalog
+
+import (
+        "context"
+        "errors"
+        "fmt"
+        "slices"
+        "strings"
+        "time"
+
+        "github.com/sweetrpg/common.go/logging"
+        "github.com/sweetrpg/entitlements-api/constants"
+        "github.com/sweetrpg/entitlements-api/data"
+        "github.com/sweetrpg/entitlements-api/models"
+)
+
+// Sentinel errors handlers map to HTTP statuses. Validation failures wrap models.ErrInvalid.
+var (
+        ErrNotFound  = data.ErrNotFound
+        ErrDuplicate = data.ErrDuplicate
+        // ErrInUse means the change would orphan something that still depends on the target.
+        ErrInUse = errors.New("in use")
+)
+
+// Service owns catalog writes and checks.
+type Service struct {
+        store data.Store
+        now   func() time.Time
+}
+
+// New returns a Service over store.
+func New(store data.Store) *Service <span class="cov6" title="18">{ return &amp;Service{store: store, now: time.Now} }</span>
+
+// KeyInput is the writable part of a key.
+type KeyInput struct {
+        Key         string
+        Type        models.KeyType
+        Description string
+        TTLSeconds  int
+}
+
+// TierInput is the writable part of a tier. Values maps key name to a JSON bool or number.
+type TierInput struct {
+        Slug          string
+        Name          string
+        Description   string
+        Values        map[string]any
+        StripePriceID string
+}
+
+func validateTTL(ttl int) error <span class="cov8" title="39">{
+        if ttl &lt; 0 || ttl &gt; constants.MaxTTLSeconds </span><span class="cov3" title="3">{
+                return fmt.Errorf("%w: ttl_seconds must be between 0 and %d", models.ErrInvalid, constants.MaxTTLSeconds)
+        }</span>
+        <span class="cov8" title="36">return nil</span>
+}
+
+// audit appends the trail entry after a successful write. The write and the entry are not one
+// transaction: if the append fails the change is already persisted, so the failure is logged at
+// ERROR and the write still reports success. Upgrade path: wrap both in a Mongo transaction if
+// lost entries ever matter.
+func (s *Service) audit(ctx context.Context, actor, action, kind, subject string, before, after any) error <span class="cov10" title="80">{
+        err := s.store.AppendAudit(ctx, models.AuditEntry{
+                At: s.now().UTC(), Actor: actor, Action: action, Kind: kind, Subject: subject, Before: before, After: after,
+        })
+        if err != nil </span><span class="cov1" title="1">{
+                logging.Logger.Error("catalog audit entry not recorded", "action", action, "kind", kind, "subject", subject, "actor", actor, "error", err.Error())
+        }</span>
+        <span class="cov10" title="80">return nil</span>
+}
+
+// CreateKey registers a key. A live key with the same name is rejected.
+func (s *Service) CreateKey(ctx context.Context, actor string, in KeyInput) (*models.Key, error) <span class="cov8" title="37">{
+        if err := models.ValidateKeyName(in.Key); err != nil </span><span class="cov1" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="36">if in.Type != models.TypeFlag &amp;&amp; in.Type != models.TypeLimit </span><span class="cov1" title="1">{
+                return nil, fmt.Errorf("%w: type must be flag or limit", models.ErrInvalid)
+        }</span>
+        <span class="cov8" title="35">if err := validateTTL(in.TTLSeconds); err != nil </span><span class="cov2" title="2">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="33">k := &amp;models.Key{Key: in.Key, Type: in.Type, Description: in.Description, TTLSeconds: in.TTLSeconds}
+        if err := s.store.InsertKey(ctx, k, actor); err != nil </span><span class="cov1" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="32">return k, s.audit(ctx, actor, "create", "key", k.Key, nil, k)</span>
+}
+
+// UpdateKey changes a key's description and TTL. Its type cannot change.
+func (s *Service) UpdateKey(ctx context.Context, actor, name, description string, ttl int) (*models.Key, error) <span class="cov3" title="4">{
+        if err := validateTTL(ttl); err != nil </span><span class="cov1" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov3" title="3">before, err := s.store.GetKeys(ctx, []string{name})
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov3" title="3">if len(before) == 0 </span><span class="cov1" title="1">{
+                return nil, ErrNotFound
+        }</span>
+        <span class="cov2" title="2">k, err := s.store.UpdateKey(ctx, name, description, ttl, actor)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov2" title="2">return k, s.audit(ctx, actor, "update", "key", name, before[0], k)</span>
+}
+
+// DeleteKey removes a key from the catalog. Tier values that still name it stay stored but are
+// never returned, because a check resolves only live keys.
+func (s *Service) DeleteKey(ctx context.Context, actor, name string) error <span class="cov3" title="3">{
+        if err := s.store.DeleteKey(ctx, name, actor); err != nil </span><span class="cov1" title="1">{
+                return err
+        }</span>
+        <span class="cov2" title="2">return s.audit(ctx, actor, "delete", "key", name, nil, nil)</span>
+}
+
+// ListKeys returns live keys under prefix, ordered by name.
+func (s *Service) ListKeys(ctx context.Context, prefix string, limit, skip int64) ([]models.Key, error) <span class="cov1" title="1">{
+        return s.store.ListKeys(ctx, prefix, limit, skip)
+}</span>
+
+// buildValues validates every named key exists and the value matches its type.
+func (s *Service) buildValues(ctx context.Context, raw map[string]any) ([]models.TierValue, error) <span class="cov8" title="33">{
+        names := make([]string, 0, len(raw))
+        for n := range raw </span><span class="cov9" title="57">{
+                names = append(names, n)
+        }</span>
+        <span class="cov8" title="33">slices.Sort(names)
+        keys, err := s.store.GetKeys(ctx, names)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="33">byName := map[string]models.Key{}
+        for _, k := range keys </span><span class="cov9" title="56">{
+                byName[k.Key] = k
+        }</span>
+        <span class="cov8" title="33">out := make([]models.TierValue, 0, len(names))
+        for _, n := range names </span><span class="cov9" title="57">{
+                k, ok := byName[n]
+                if !ok </span><span class="cov1" title="1">{
+                        return nil, fmt.Errorf("%w: unknown key %q", models.ErrInvalid, n)
+                }</span>
+                <span class="cov9" title="56">v, err := models.ParseValue(k.Type, raw[n])
+                if err != nil </span><span class="cov2" title="2">{
+                        return nil, fmt.Errorf("%w (key %q)", err, n)
+                }</span>
+                <span class="cov9" title="54">out = append(out, models.TierValue{Key: n, Type: k.Type, Value: v})</span>
+        }
+        <span class="cov7" title="30">return out, nil</span>
+}
+
+func (s *Service) tierFromInput(ctx context.Context, in TierInput) (*models.Tier, error) <span class="cov8" title="35">{
+        if err := models.ValidateTierSlug(in.Slug); err != nil </span><span class="cov1" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="34">if strings.TrimSpace(in.Name) == "" </span><span class="cov1" title="1">{
+                return nil, fmt.Errorf("%w: name is required", models.ErrInvalid)
+        }</span>
+        <span class="cov8" title="33">values, err := s.buildValues(ctx, in.Values)
+        if err != nil </span><span class="cov3" title="3">{
+                return nil, err
+        }</span>
+        <span class="cov7" title="30">return &amp;models.Tier{Slug: in.Slug, Name: in.Name, Description: in.Description, Values: values, StripePriceID: in.StripePriceID}, nil</span>
+}
+
+// CreateTier adds a tier.
+func (s *Service) CreateTier(ctx context.Context, actor string, in TierInput) (*models.Tier, error) <span class="cov8" title="32">{
+        t, err := s.tierFromInput(ctx, in)
+        if err != nil </span><span class="cov4" title="5">{
+                return nil, err
+        }</span>
+        <span class="cov7" title="27">if err := s.store.InsertTier(ctx, t, actor); err != nil </span><span class="cov1" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov7" title="26">return t, s.audit(ctx, actor, "create", "tier", t.Slug, nil, t)</span>
+}
+
+// UpdateTier replaces a tier's name, description, values, and Stripe price ID.
+func (s *Service) UpdateTier(ctx context.Context, actor string, in TierInput) (*models.Tier, error) <span class="cov3" title="3">{
+        t, err := s.tierFromInput(ctx, in)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov3" title="3">before, err := s.store.GetTiers(ctx, []string{in.Slug})
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov3" title="3">if len(before) == 0 </span><span class="cov1" title="1">{
+                return nil, ErrNotFound
+        }</span>
+        <span class="cov2" title="2">updated, err := s.store.UpdateTier(ctx, t, actor)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov2" title="2">return updated, s.audit(ctx, actor, "update", "tier", in.Slug, before[0], updated)</span>
+}
+
+// DeleteTier removes a tier. The default tier cannot be deleted; pick another default first.
+func (s *Service) DeleteTier(ctx context.Context, actor, slug string) error <span class="cov3" title="4">{
+        def, err := s.store.DefaultTierID(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov3" title="4">if def == slug </span><span class="cov1" title="1">{
+                return fmt.Errorf("%w: tier is the default tier", ErrInUse)
+        }</span>
+        <span class="cov3" title="3">if err := s.store.DeleteTier(ctx, slug, actor); err != nil </span><span class="cov1" title="1">{
+                return err
+        }</span>
+        <span class="cov2" title="2">return s.audit(ctx, actor, "delete", "tier", slug, nil, nil)</span>
+}
+
+// ListTiers returns live tiers ordered by id.
+func (s *Service) ListTiers(ctx context.Context, limit, skip int64) ([]models.Tier, error) <span class="cov1" title="1">{
+        return s.store.ListTiers(ctx, limit, skip)
+}</span>
+
+// SetDefaultTier makes an existing tier the one every user implicitly holds.
+func (s *Service) SetDefaultTier(ctx context.Context, actor, slug string) error <span class="cov6" title="15">{
+        tiers, err := s.store.GetTiers(ctx, []string{slug})
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov6" title="15">if len(tiers) == 0 </span><span class="cov1" title="1">{
+                return ErrNotFound
+        }</span>
+        <span class="cov6" title="14">before, err := s.store.DefaultTierID(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov6" title="14">if err := s.store.SetDefaultTierID(ctx, slug, actor); err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov6" title="14">return s.audit(ctx, actor, "set_default", "default_tier", slug, before, slug)</span>
+}
+
+// DefaultTier returns the default tier id, or "" when none is configured.
+func (s *Service) DefaultTier(ctx context.Context) (string, error) <span class="cov1" title="1">{
+        return s.store.DefaultTierID(ctx)
+}</span>
+
+// ListAudit returns audit entries newest first.
+func (s *Service) ListAudit(ctx context.Context, limit, skip int64) ([]models.AuditEntry, error) <span class="cov1" title="1">{
+        return s.store.ListAudit(ctx, limit, skip)
+}</span>
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package main
+
+import (
+        "context"
+        "log"
+        "log/slog"
+        "os"
+        "strconv"
+        "strings"
+        "time"
+
+        "github.com/getsentry/sentry-go"
+        "github.com/gin-contrib/cors"
+        "github.com/gin-gonic/gin"
+        "github.com/grafana/pyroscope-go"
+        "github.com/joho/godotenv"
+        "github.com/penglongli/gin-metrics/ginmetrics"
+        sloggin "github.com/samber/slog-gin"
+        actuator "github.com/sinhashubham95/go-actuator"
+        swaggerfiles "github.com/swaggo/files"
+        ginSwagger "github.com/swaggo/gin-swagger"
+        apiconstants "github.com/sweetrpg/api-core.go/constants"
+        "github.com/sweetrpg/api-core.go/featureflags"
+        "github.com/sweetrpg/api-core.go/ratelimit"
+        "github.com/sweetrpg/api-core.go/tracing"
+        apiutil "github.com/sweetrpg/api-core.go/util"
+        "github.com/sweetrpg/authz-client.go/authz"
+        "github.com/sweetrpg/common.go/logging"
+        "github.com/sweetrpg/common.go/util"
+        "github.com/sweetrpg/entitlements-api/catalog"
+        "github.com/sweetrpg/entitlements-api/config"
+        "github.com/sweetrpg/entitlements-api/constants"
+        "github.com/sweetrpg/entitlements-api/data"
+        "github.com/sweetrpg/entitlements-api/docs"
+        "github.com/sweetrpg/entitlements-api/server"
+        "github.com/sweetrpg/mongodb.go/database"
+        "go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+)
+
+// @title Entitlements API service
+// @version 1.0
+// @description Swagger APIs
+// @termsOfService https://pilgrimagesoftware.com/terms/
+// @contact.name API Support
+// @contact.url https://sweetrpg.com
+// @contact.email admin@sweetrpg.com
+// @license.name MIT
+// @license.url https://mit-license.org/
+func main() <span class="cov0" title="0">{
+        _ = godotenv.Load(".env")
+
+        logging.Init()
+
+        cfg, err := config.Load(os.Getenv)
+        if err != nil </span><span class="cov0" title="0">{
+                logging.Logger.Error("Refusing to start", "error", err.Error())
+                os.Exit(1)
+        }</span>
+
+        <span class="cov0" title="0">setupSentry()
+
+        ff := featureflags.New(constants.ServiceName)
+
+        if stopProfiling := setupProfiling(ff); stopProfiling != nil </span><span class="cov0" title="0">{
+                defer stopProfiling()
+        }</span>
+
+        <span class="cov0" title="0">httpLogger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+        r := gin.New()
+        r.Use(sloggin.New(httpLogger))
+        r.Use(gin.Recovery())
+
+        setupTracing(r)
+        defer tracing.TeardownTracing()
+
+        setupCORS(r)
+
+        setupMetrics(r)
+
+        database.SetupDatabase()
+        defer database.TeardownDatabase()
+
+        store := data.NewMongoStore(database.Db)
+        if err := store.EnsureIndexes(context.Background()); err != nil </span><span class="cov0" title="0">{
+                logging.Logger.Error("Failed to ensure indexes", "error", err.Error())
+        }</span>
+
+        <span class="cov0" title="0">setupAcuator(r)
+
+        setupSwagger(r)
+
+        // Per-client/IP rate limiter (Redis-backed, fail-closed). Replaces the process-wide bucket.
+        redisPool := apiutil.RedisPool()
+        if redisPool != nil </span><span class="cov0" title="0">{
+                pingCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+                if err := ratelimit.Ping(pingCtx, redisPool); err != nil </span><span class="cov0" title="0">{
+                        logging.Logger.Error("REDIS_HOST is configured but unreachable at startup; rate-limited requests will fail closed until it recovers",
+                                "error", err.Error())
+                }</span>
+                <span class="cov0" title="0">cancel()</span>
+        } else<span class="cov0" title="0"> {
+                logging.Logger.Warn("REDIS_HOST is not configured; rate limiting will fail closed (503) on every limited request")
+        }</span>
+        <span class="cov0" title="0">r.Use(ratelimit.Middleware(redisPool, ratelimit.DefaultOptions()))
+
+        authzClient := authz.NewClient(cfg.AuthAPIURL, cfg.UsersAPIURL)
+        server.SetupHandlers(r, catalog.New(store), authzClient, cfg)
+
+        _ = r.Run(util.GetEnv(apiconstants.BIND_ADDRESS, ":8000"))</span>
+}
+
+func setupSwagger(r *gin.Engine) <span class="cov0" title="0">{
+        logging.Logger.Info("Setting up Swagger...")
+
+        docs.SwaggerInfo.Version = os.Getenv(apiconstants.VERSION)
+        docs.SwaggerInfo.Host = util.GetEnv(apiconstants.INGRESS_HOST, "localhost")
+        docs.SwaggerInfo.BasePath = util.GetEnv(apiconstants.INGRESS_BASE_PATH, "/")
+        docs.SwaggerInfo.Schemes = strings.Split(util.GetEnv(apiconstants.INGRESS_SCHEMES, "http"), ",")
+        r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
+}</span>
+
+func setupCORS(r *gin.Engine) <span class="cov0" title="0">{
+        logging.Logger.Info("Setting up CORS...")
+
+        origins := util.GetEnv(constants.ALLOWED_ORIGINS, "")
+        if origins == "" </span><span class="cov0" title="0">{
+                logging.Logger.Warn("ALLOWED_ORIGINS not set, no cross-origin requests will be allowed")
+                return
+        }</span>
+
+        <span class="cov0" title="0">r.Use(cors.New(cors.Config{
+                AllowOrigins:     strings.Split(origins, ","),
+                AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+                AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+                AllowCredentials: true,
+                MaxAge:           12 * time.Hour,
+        }))</span>
+}
+
+func setupSentry() <span class="cov0" title="0">{
+        logging.Logger.Info("Setting up Sentry...")
+
+        sentryDsn, found := os.LookupEnv(apiconstants.SENTRY_DSN)
+        if found </span><span class="cov0" title="0">{
+                sentryDebug, _ := strconv.ParseBool(util.GetEnv(apiconstants.SENTRY_DEBUG, "false"))
+                err := sentry.Init(sentry.ClientOptions{
+                        Dsn:              sentryDsn,
+                        Debug:            sentryDebug,
+                        AttachStacktrace: true,
+                        EnableTracing:    true,
+                        TracesSampleRate: 1.0,
+                        TracesSampler: sentry.TracesSampler(func(ctx sentry.SamplingContext) float64 </span><span class="cov0" title="0">{
+                                if strings.Contains(ctx.Span.Name, "/status/") </span><span class="cov0" title="0">{
+                                        return 0.0
+                                }</span>
+                                <span class="cov0" title="0">return 1.0</span>
+                        }),
+                        ServerName: constants.ServiceName,
+                })
+                <span class="cov0" title="0">if err != nil </span><span class="cov0" title="0">{
+                        logging.Logger.Error("Error while trying to initialize Sentry", "error", err.Error())
+                }</span>
+                <span class="cov0" title="0">defer func() </span><span class="cov0" title="0">{
+                        log.Print("Flushing Sentry...")
+                        sentry.Flush(2 * time.Second)
+                }</span>()
+        }
+}
+
+// setupProfiling starts continuous profiling only when the profiling-enabled
+// feature flag evaluates to true, regardless of whether
+// PYROSCOPE_SERVER_ADDRESS happens to be set - the flag is the on/off
+// control, PYROSCOPE_SERVER_ADDRESS is only the destination. See the
+// pyroscope-profiling-flag spec's three scenarios.
+func setupProfiling(ff *featureflags.Client) func() <span class="cov0" title="0">{
+        logging.Logger.Info("Setting up continuous profiling...")
+
+        if !ff.BoolFlag(context.Background(), constants.ProfilingEnabledFlag, false) </span><span class="cov0" title="0">{
+                logging.Logger.Info("profiling-enabled flag is off, continuous profiling disabled")
+                return nil
+        }</span>
+
+        <span class="cov0" title="0">serverAddress, found := os.LookupEnv(constants.PYROSCOPE_SERVER_ADDRESS)
+        if !found </span><span class="cov0" title="0">{
+                logging.Logger.Warn("profiling-enabled flag is on but PYROSCOPE_SERVER_ADDRESS not set, continuous profiling disabled")
+                return nil
+        }</span>
+
+        <span class="cov0" title="0">profiler, err := pyroscope.Start(pyroscope.Config{
+                ApplicationName: constants.ServiceName,
+                ServerAddress:   serverAddress,
+                TenantID:        util.GetEnv(constants.PYROSCOPE_TENANT_ID, ""),
+                Tags: map[string]string{
+                        "env": util.GetEnv(apiconstants.ENV, "dev"),
+                },
+        })
+        if err != nil </span><span class="cov0" title="0">{
+                logging.Logger.Error("Error while trying to initialize continuous profiling", "error", err.Error())
+                return nil
+        }</span>
+
+        <span class="cov0" title="0">return func() </span><span class="cov0" title="0">{
+                _ = profiler.Stop()
+        }</span>
+}
+
+func setupAcuator(r *gin.Engine) <span class="cov0" title="0">{
+        logging.Logger.Info("Setting up actuator...")
+
+        actuatorHandler := actuator.GetActuatorHandler(&amp;actuator.Config{
+                Endpoints: []int{
+                        actuator.Env,
+                        actuator.Info,
+                        actuator.Metrics,
+                        actuator.Ping,
+                        actuator.ThreadDump,
+                },
+                Env:     util.GetEnv(apiconstants.ENV, "dev"),
+                Name:    constants.ServiceName,
+                Port:    util.GetEnvInt(apiconstants.PORT, 0),
+                Version: util.GetEnv(apiconstants.VERSION, "v0.0.0"),
+        })
+        ginActuatorHandler := func(ctx *gin.Context) </span><span class="cov0" title="0">{
+                actuatorHandler(ctx.Writer, ctx.Request)
+        }</span>
+        <span class="cov0" title="0">r.GET("/actuator/*endpoint", ginActuatorHandler)</span>
+}
+
+func setupTracing(r *gin.Engine) <span class="cov0" title="0">{
+        logging.Logger.Info("Setting up tracing...")
+
+        // Teardown is deferred by the caller (main), not here - deferring it in this function
+        // would run it as soon as this function returns, shutting down the tracer provider
+        // before the server ever serves a request, silently dropping every span.
+        tracing.SetupTracing(constants.ServiceName)
+        r.Use(otelgin.Middleware(constants.ServiceName))
+}</span>
+
+func setupMetrics(r *gin.Engine) <span class="cov0" title="0">{
+        logging.Logger.Info("Setting up metrics endpoint...")
+
+        m := ginmetrics.GetMonitor()
+        m.SetMetricPath("/metrics")
+        m.SetSlowTime(10)
+        m.SetDuration([]float64{0.1, 0.3, 1.2, 5, 10})
+        m.Use(r)
+}</span>
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">// Package config validates the settings the service cannot run without, so a bad deployment
+// fails at startup with a message naming the problem instead of at the first request.
+package config
+
+import (
+        "errors"
+        "fmt"
+        "strings"
+
+        "github.com/sweetrpg/entitlements-api/constants"
+)
+
+// minTokenLength rejects trivially guessable service tokens.
+const minTokenLength = 32
+
+// Config holds validated settings.
+type Config struct {
+        AuthAPIURL  string
+        UsersAPIURL string
+        // ServiceTokens maps a bearer token to the name of the registered service that owns it.
+        ServiceTokens map[string]string
+}
+
+// Load reads and validates settings through getenv (os.Getenv in production). Every problem is
+// reported at once.
+func Load(getenv func(string) string) (*Config, error) <span class="cov7" title="7">{
+        var problems []string
+
+        cfg := &amp;Config{
+                AuthAPIURL:  getenv(constants.AUTH_API_URL),
+                UsersAPIURL: getenv(constants.USERS_API_URL),
+        }
+        for _, name := range []string{constants.AUTH_API_URL, constants.USERS_API_URL} </span><span class="cov10" title="14">{
+                if getenv(name) == "" </span><span class="cov3" title="2">{
+                        problems = append(problems, name+" is required")
+                }</span>
+        }
+
+        <span class="cov7" title="7">if getenv("DB_URI") == "" &amp;&amp; getenv("DB_HOST") == "" </span><span class="cov1" title="1">{
+                problems = append(problems, "DB_URI (or DB_HOST and DB_NAME) is required")
+        }</span>
+
+        <span class="cov7" title="7">tokens, err := parseServiceTokens(getenv(constants.SERVICE_TOKENS))
+        if err != nil </span><span class="cov7" title="6">{
+                problems = append(problems, constants.SERVICE_TOKENS+": "+err.Error())
+        }</span>
+        <span class="cov7" title="7">cfg.ServiceTokens = tokens
+
+        if len(problems) &gt; 0 </span><span class="cov7" title="6">{
+                return nil, errors.New("invalid configuration: " + strings.Join(problems, "; "))
+        }</span>
+        <span class="cov1" title="1">return cfg, nil</span>
+}
+
+// parseServiceTokens parses "name=token,name=token". Names and tokens must be unique so a
+// token always identifies exactly one service.
+func parseServiceTokens(raw string) (map[string]string, error) <span class="cov7" title="7">{
+        if strings.TrimSpace(raw) == "" </span><span class="cov1" title="1">{
+                return nil, errors.New("at least one name=token pair is required")
+        }</span>
+        <span class="cov7" title="6">byToken := map[string]string{}
+        names := map[string]bool{}
+        for _, pair := range strings.Split(raw, ",") </span><span class="cov8" title="9">{
+                name, token, ok := strings.Cut(strings.TrimSpace(pair), "=")
+                if !ok || name == "" </span><span class="cov3" title="2">{
+                        return nil, errors.New("entries must look like name=token")
+                }</span>
+                <span class="cov7" title="7">if len(token) &lt; minTokenLength </span><span class="cov1" title="1">{
+                        return nil, fmt.Errorf("token for %q is shorter than %d characters", name, minTokenLength)
+                }</span>
+                <span class="cov7" title="6">if names[name] </span><span class="cov1" title="1">{
+                        return nil, fmt.Errorf("service %q is listed twice", name)
+                }</span>
+                <span class="cov6" title="5">if _, dup := byToken[token]; dup </span><span class="cov1" title="1">{
+                        return nil, fmt.Errorf("service %q reuses another service's token", name)
+                }</span>
+                <span class="cov5" title="4">names[name] = true
+                byToken[token] = name</span>
+        }
+        <span class="cov1" title="1">return byToken, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">package data
+
+import (
+        "context"
+        "slices"
+        "strings"
+        "sync"
+        "time"
+
+        "github.com/sweetrpg/entitlements-api/models"
+        mcore "github.com/sweetrpg/model-core.go/models"
+)
+
+// MemoryStore is an in-process Store used by tests so they need no database. It mirrors the
+// Mongo store's semantics: soft deletes, live-only uniqueness, and the same grant activity rule.
+type MemoryStore struct {
+        mu      sync.Mutex
+        keys    []*models.Key
+        tiers   []*models.Tier
+        grants  []models.Grant
+        audit   []models.AuditEntry
+        defTier string
+        now     func() time.Time
+}
+
+// NewMemoryStore returns an empty store using the wall clock.
+func NewMemoryStore() *MemoryStore <span class="cov0" title="0">{ return &amp;MemoryStore{now: time.Now} }</span>
+
+// AddGrant seeds a grant; grants are written by the billing flow, not by this service's API.
+func (m *MemoryStore) AddGrant(g models.Grant) <span class="cov0" title="0">{
+        m.mu.Lock()
+        defer m.mu.Unlock()
+        m.grants = append(m.grants, g)
+}</span>
+
+func live(a mcore.Auditable) bool <span class="cov0" title="0">{ return a.DeletedAt == nil }</span>
+
+func (m *MemoryStore) InsertKey(_ context.Context, k *models.Key, actor string) error <span class="cov0" title="0">{
+        m.mu.Lock()
+        defer m.mu.Unlock()
+        if m.findKey(k.Key) != nil </span><span class="cov0" title="0">{
+                return ErrDuplicate
+        }</span>
+        <span class="cov0" title="0">mcore.StampCreate(&amp;k.Auditable, actor, m.now().UTC())
+        c := *k
+        m.keys = append(m.keys, &amp;c)
+        return nil</span>
+}
+
+func (m *MemoryStore) findKey(name string) *models.Key <span class="cov0" title="0">{
+        for _, k := range m.keys </span><span class="cov0" title="0">{
+                if k.Key == name &amp;&amp; live(k.Auditable) </span><span class="cov0" title="0">{
+                        return k
+                }</span>
+        }
+        <span class="cov0" title="0">return nil</span>
+}
+
+func (m *MemoryStore) GetKeys(_ context.Context, names []string) ([]models.Key, error) <span class="cov0" title="0">{
+        m.mu.Lock()
+        defer m.mu.Unlock()
+        var out []models.Key
+        for _, k := range m.keys </span><span class="cov0" title="0">{
+                if live(k.Auditable) &amp;&amp; slices.Contains(names, k.Key) </span><span class="cov0" title="0">{
+                        out = append(out, *k)
+                }</span>
+        }
+        <span class="cov0" title="0">return out, nil</span>
+}
+
+func (m *MemoryStore) ListKeys(_ context.Context, prefix string, limit, skip int64) ([]models.Key, error) <span class="cov0" title="0">{
+        m.mu.Lock()
+        defer m.mu.Unlock()
+        var out []models.Key
+        for _, k := range m.keys </span><span class="cov0" title="0">{
+                if live(k.Auditable) &amp;&amp; strings.HasPrefix(k.Key, prefix) </span><span class="cov0" title="0">{
+                        out = append(out, *k)
+                }</span>
+        }
+        <span class="cov0" title="0">slices.SortFunc(out, func(a, b models.Key) int </span><span class="cov0" title="0">{ return strings.Compare(a.Key, b.Key) }</span>)
+        <span class="cov0" title="0">return window(out, limit, skip), nil</span>
+}
+
+func (m *MemoryStore) UpdateKey(_ context.Context, name, description string, ttl int, actor string) (*models.Key, error) <span class="cov0" title="0">{
+        m.mu.Lock()
+        defer m.mu.Unlock()
+        k := m.findKey(name)
+        if k == nil </span><span class="cov0" title="0">{
+                return nil, ErrNotFound
+        }</span>
+        <span class="cov0" title="0">k.Description, k.TTLSeconds = description, ttl
+        mcore.StampUpdate(&amp;k.Auditable, actor, m.now().UTC())
+        c := *k
+        return &amp;c, nil</span>
+}
+
+func (m *MemoryStore) DeleteKey(_ context.Context, name, actor string) error <span class="cov0" title="0">{
+        m.mu.Lock()
+        defer m.mu.Unlock()
+        k := m.findKey(name)
+        if k == nil </span><span class="cov0" title="0">{
+                return ErrNotFound
+        }</span>
+        <span class="cov0" title="0">now := m.now().UTC()
+        k.DeletedAt, k.DeletedBy = &amp;now, &amp;actor
+        return nil</span>
+}
+
+func (m *MemoryStore) findTier(slug string) *models.Tier <span class="cov0" title="0">{
+        for _, t := range m.tiers </span><span class="cov0" title="0">{
+                if t.Slug == slug &amp;&amp; live(t.Auditable) </span><span class="cov0" title="0">{
+                        return t
+                }</span>
+        }
+        <span class="cov0" title="0">return nil</span>
+}
+
+func (m *MemoryStore) InsertTier(_ context.Context, t *models.Tier, actor string) error <span class="cov0" title="0">{
+        m.mu.Lock()
+        defer m.mu.Unlock()
+        if m.findTier(t.Slug) != nil </span><span class="cov0" title="0">{
+                return ErrDuplicate
+        }</span>
+        <span class="cov0" title="0">mcore.StampCreate(&amp;t.Auditable, actor, m.now().UTC())
+        c := *t
+        m.tiers = append(m.tiers, &amp;c)
+        return nil</span>
+}
+
+func (m *MemoryStore) GetTiers(_ context.Context, slugs []string) ([]models.Tier, error) <span class="cov0" title="0">{
+        m.mu.Lock()
+        defer m.mu.Unlock()
+        var out []models.Tier
+        for _, t := range m.tiers </span><span class="cov0" title="0">{
+                if live(t.Auditable) &amp;&amp; slices.Contains(slugs, t.Slug) </span><span class="cov0" title="0">{
+                        out = append(out, *t)
+                }</span>
+        }
+        <span class="cov0" title="0">return out, nil</span>
+}
+
+func (m *MemoryStore) ListTiers(_ context.Context, limit, skip int64) ([]models.Tier, error) <span class="cov0" title="0">{
+        m.mu.Lock()
+        defer m.mu.Unlock()
+        var out []models.Tier
+        for _, t := range m.tiers </span><span class="cov0" title="0">{
+                if live(t.Auditable) </span><span class="cov0" title="0">{
+                        out = append(out, *t)
+                }</span>
+        }
+        <span class="cov0" title="0">slices.SortFunc(out, func(a, b models.Tier) int </span><span class="cov0" title="0">{ return strings.Compare(a.Slug, b.Slug) }</span>)
+        <span class="cov0" title="0">return window(out, limit, skip), nil</span>
+}
+
+func (m *MemoryStore) UpdateTier(_ context.Context, in *models.Tier, actor string) (*models.Tier, error) <span class="cov0" title="0">{
+        m.mu.Lock()
+        defer m.mu.Unlock()
+        t := m.findTier(in.Slug)
+        if t == nil </span><span class="cov0" title="0">{
+                return nil, ErrNotFound
+        }</span>
+        <span class="cov0" title="0">t.Name, t.Description, t.Values, t.StripePriceID = in.Name, in.Description, in.Values, in.StripePriceID
+        mcore.StampUpdate(&amp;t.Auditable, actor, m.now().UTC())
+        c := *t
+        return &amp;c, nil</span>
+}
+
+func (m *MemoryStore) DeleteTier(_ context.Context, slug, actor string) error <span class="cov0" title="0">{
+        m.mu.Lock()
+        defer m.mu.Unlock()
+        t := m.findTier(slug)
+        if t == nil </span><span class="cov0" title="0">{
+                return ErrNotFound
+        }</span>
+        <span class="cov0" title="0">now := m.now().UTC()
+        t.DeletedAt, t.DeletedBy = &amp;now, &amp;actor
+        return nil</span>
+}
+
+func (m *MemoryStore) DefaultTierID(context.Context) (string, error) <span class="cov0" title="0">{
+        m.mu.Lock()
+        defer m.mu.Unlock()
+        return m.defTier, nil
+}</span>
+
+func (m *MemoryStore) SetDefaultTierID(_ context.Context, slug, _ string) error <span class="cov0" title="0">{
+        m.mu.Lock()
+        defer m.mu.Unlock()
+        m.defTier = slug
+        return nil
+}</span>
+
+func (m *MemoryStore) ActiveGrants(_ context.Context, userID string, now time.Time) ([]models.Grant, error) <span class="cov0" title="0">{
+        m.mu.Lock()
+        defer m.mu.Unlock()
+        var out []models.Grant
+        for _, g := range m.grants </span><span class="cov0" title="0">{
+                if g.UserID == userID &amp;&amp; g.ActiveAt(now) </span><span class="cov0" title="0">{
+                        out = append(out, g)
+                }</span>
+        }
+        <span class="cov0" title="0">return out, nil</span>
+}
+
+func (m *MemoryStore) AppendAudit(_ context.Context, e models.AuditEntry) error <span class="cov0" title="0">{
+        m.mu.Lock()
+        defer m.mu.Unlock()
+        m.audit = append(m.audit, e)
+        return nil
+}</span>
+
+func (m *MemoryStore) ListAudit(_ context.Context, limit, skip int64) ([]models.AuditEntry, error) <span class="cov0" title="0">{
+        m.mu.Lock()
+        defer m.mu.Unlock()
+        out := slices.Clone(m.audit)
+        slices.Reverse(out)
+        return window(out, limit, skip), nil
+}</span>
+
+func (m *MemoryStore) Ping(context.Context) error <span class="cov0" title="0">{ return nil }</span>
+
+// window applies skip then limit; limit &lt;= 0 means no limit.
+func window[T any](s []T, limit, skip int64) []T <span class="cov0" title="0">{
+        if skip &gt;= int64(len(s)) </span><span class="cov0" title="0">{
+                return nil
+        }</span>
+        <span class="cov0" title="0">s = s[skip:]
+        if limit &gt; 0 &amp;&amp; limit &lt; int64(len(s)) </span><span class="cov0" title="0">{
+                s = s[:limit]
+        }</span>
+        <span class="cov0" title="0">return s</span>
+}
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">package data
+
+import (
+        "context"
+        "errors"
+        "regexp"
+        "time"
+
+        "github.com/sweetrpg/entitlements-api/constants"
+        "github.com/sweetrpg/entitlements-api/models"
+        mcore "github.com/sweetrpg/model-core.go/models"
+        "go.mongodb.org/mongo-driver/bson"
+        "go.mongodb.org/mongo-driver/mongo"
+        "go.mongodb.org/mongo-driver/mongo/options"
+)
+
+// MongoStore implements Store on MongoDB. It is a thin translation layer: the rules live in the
+// catalog package and are tested against MemoryStore; this file is exercised against a live
+// database only.
+type MongoStore struct {
+        db *mongo.Database
+}
+
+// NewMongoStore wraps db.
+func NewMongoStore(db *mongo.Database) *MongoStore <span class="cov0" title="0">{ return &amp;MongoStore{db: db} }</span>
+
+// notDeleted is merged into every catalog read so a new read path inherits the tombstone filter.
+var notDeleted = bson.E{Key: "deleted_at", Value: nil}
+
+// EnsureIndexes creates the unique-among-live indexes and the lookup indexes. Safe to call on
+// every startup.
+func (s *MongoStore) EnsureIndexes(ctx context.Context) error <span class="cov0" title="0">{
+        liveOnly := options.Index().SetUnique(true).
+                SetPartialFilterExpression(bson.D{{Key: "deleted_at", Value: bson.D{{Key: "$exists", Value: false}}}})
+        idx := map[string][]mongo.IndexModel{
+                constants.KeysCollection:   {{Keys: bson.D{{Key: "key", Value: 1}}, Options: liveOnly}},
+                constants.TiersCollection:  {{Keys: bson.D{{Key: "slug", Value: 1}}, Options: liveOnly}},
+                constants.GrantsCollection: {{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "status", Value: 1}}}},
+                constants.AuditCollection:  {{Keys: bson.D{{Key: "at", Value: -1}}}},
+        }
+        for coll, ms := range idx </span><span class="cov0" title="0">{
+                if _, err := s.db.Collection(coll).Indexes().CreateMany(ctx, ms); err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+        }
+        <span class="cov0" title="0">return nil</span>
+}
+
+func (s *MongoStore) insert(ctx context.Context, coll string, doc any) error <span class="cov0" title="0">{
+        _, err := s.db.Collection(coll).InsertOne(ctx, doc)
+        if mongo.IsDuplicateKeyError(err) </span><span class="cov0" title="0">{
+                return ErrDuplicate
+        }</span>
+        <span class="cov0" title="0">return err</span>
+}
+
+func find[T any](ctx context.Context, c *mongo.Collection, filter bson.D, opts *options.FindOptions) ([]T, error) <span class="cov0" title="0">{
+        cur, err := c.Find(ctx, filter, opts)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">var out []T
+        if err := cur.All(ctx, &amp;out); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">return out, nil</span>
+}
+
+func page(sortKey string, dir int, limit, skip int64) *options.FindOptions <span class="cov0" title="0">{
+        o := options.Find().SetSort(bson.D{{Key: sortKey, Value: dir}}).SetSkip(skip)
+        if limit &gt; 0 </span><span class="cov0" title="0">{
+                o.SetLimit(limit)
+        }</span>
+        <span class="cov0" title="0">return o</span>
+}
+
+func (s *MongoStore) InsertKey(ctx context.Context, k *models.Key, actor string) error <span class="cov0" title="0">{
+        mcore.StampCreate(&amp;k.Auditable, actor, time.Now().UTC())
+        return s.insert(ctx, constants.KeysCollection, k)
+}</span>
+
+func (s *MongoStore) GetKeys(ctx context.Context, names []string) ([]models.Key, error) <span class="cov0" title="0">{
+        f := bson.D{notDeleted, {Key: "key", Value: bson.D{{Key: "$in", Value: names}}}}
+        return find[models.Key](ctx, s.db.Collection(constants.KeysCollection), f, nil)
+}</span>
+
+func (s *MongoStore) ListKeys(ctx context.Context, prefix string, limit, skip int64) ([]models.Key, error) <span class="cov0" title="0">{
+        f := bson.D{notDeleted, {Key: "key", Value: bson.D{{Key: "$regex", Value: "^" + regexp.QuoteMeta(prefix)}}}}
+        return find[models.Key](ctx, s.db.Collection(constants.KeysCollection), f, page("key", 1, limit, skip))
+}</span>
+
+func (s *MongoStore) UpdateKey(ctx context.Context, name, description string, ttl int, actor string) (*models.Key, error) <span class="cov0" title="0">{
+        set := bson.D{
+                {Key: "description", Value: description}, {Key: "ttl_seconds", Value: ttl},
+                {Key: "updated_at", Value: time.Now().UTC()}, {Key: "updated_by", Value: actor},
+        }
+        var out models.Key
+        err := s.db.Collection(constants.KeysCollection).
+                FindOneAndUpdate(ctx, bson.D{notDeleted, {Key: "key", Value: name}}, bson.D{{Key: "$set", Value: set}},
+                        options.FindOneAndUpdate().SetReturnDocument(options.After)).Decode(&amp;out)
+        return &amp;out, mapNoDoc(err)
+}</span>
+
+func (s *MongoStore) DeleteKey(ctx context.Context, name, actor string) error <span class="cov0" title="0">{
+        return s.softDelete(ctx, constants.KeysCollection, bson.D{notDeleted, {Key: "key", Value: name}}, actor)
+}</span>
+
+func (s *MongoStore) softDelete(ctx context.Context, coll string, filter bson.D, actor string) error <span class="cov0" title="0">{
+        set := bson.D{{Key: "deleted_at", Value: time.Now().UTC()}, {Key: "deleted_by", Value: actor}}
+        res, err := s.db.Collection(coll).UpdateOne(ctx, filter, bson.D{{Key: "$set", Value: set}})
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">if res.MatchedCount == 0 </span><span class="cov0" title="0">{
+                return ErrNotFound
+        }</span>
+        <span class="cov0" title="0">return nil</span>
+}
+
+func (s *MongoStore) InsertTier(ctx context.Context, t *models.Tier, actor string) error <span class="cov0" title="0">{
+        mcore.StampCreate(&amp;t.Auditable, actor, time.Now().UTC())
+        return s.insert(ctx, constants.TiersCollection, t)
+}</span>
+
+func (s *MongoStore) GetTiers(ctx context.Context, slugs []string) ([]models.Tier, error) <span class="cov0" title="0">{
+        f := bson.D{notDeleted, {Key: "slug", Value: bson.D{{Key: "$in", Value: slugs}}}}
+        return find[models.Tier](ctx, s.db.Collection(constants.TiersCollection), f, nil)
+}</span>
+
+func (s *MongoStore) ListTiers(ctx context.Context, limit, skip int64) ([]models.Tier, error) <span class="cov0" title="0">{
+        return find[models.Tier](ctx, s.db.Collection(constants.TiersCollection), bson.D{notDeleted}, page("slug", 1, limit, skip))
+}</span>
+
+func (s *MongoStore) UpdateTier(ctx context.Context, t *models.Tier, actor string) (*models.Tier, error) <span class="cov0" title="0">{
+        set := bson.D{
+                {Key: "name", Value: t.Name}, {Key: "description", Value: t.Description},
+                {Key: "values", Value: t.Values}, {Key: "stripe_price_id", Value: t.StripePriceID},
+                {Key: "updated_at", Value: time.Now().UTC()}, {Key: "updated_by", Value: actor},
+        }
+        var out models.Tier
+        err := s.db.Collection(constants.TiersCollection).
+                FindOneAndUpdate(ctx, bson.D{notDeleted, {Key: "slug", Value: t.Slug}}, bson.D{{Key: "$set", Value: set}},
+                        options.FindOneAndUpdate().SetReturnDocument(options.After)).Decode(&amp;out)
+        return &amp;out, mapNoDoc(err)
+}</span>
+
+func (s *MongoStore) DeleteTier(ctx context.Context, slug, actor string) error <span class="cov0" title="0">{
+        return s.softDelete(ctx, constants.TiersCollection, bson.D{notDeleted, {Key: "slug", Value: slug}}, actor)
+}</span>
+
+func (s *MongoStore) DefaultTierID(ctx context.Context) (string, error) <span class="cov0" title="0">{
+        var cfg models.CatalogConfig
+        err := s.db.Collection(constants.CatalogConfigCollection).
+                FindOne(ctx, bson.D{{Key: "_id", Value: constants.CatalogConfigID}}).Decode(&amp;cfg)
+        if errors.Is(err, mongo.ErrNoDocuments) </span><span class="cov0" title="0">{
+                return "", nil
+        }</span>
+        <span class="cov0" title="0">return cfg.DefaultTierID, err</span>
+}
+
+func (s *MongoStore) SetDefaultTierID(ctx context.Context, slug, actor string) error <span class="cov0" title="0">{
+        now := time.Now().UTC()
+        update := bson.D{
+                {Key: "$set", Value: bson.D{
+                        {Key: "default_tier_id", Value: slug},
+                        {Key: "updated_at", Value: now}, {Key: "updated_by", Value: actor},
+                }},
+                {Key: "$setOnInsert", Value: bson.D{{Key: "created_at", Value: now}, {Key: "created_by", Value: actor}}},
+        }
+        _, err := s.db.Collection(constants.CatalogConfigCollection).
+                UpdateOne(ctx, bson.D{{Key: "_id", Value: constants.CatalogConfigID}}, update, options.Update().SetUpsert(true))
+        return err
+}</span>
+
+func (s *MongoStore) ActiveGrants(ctx context.Context, userID string, now time.Time) ([]models.Grant, error) <span class="cov0" title="0">{
+        f := bson.D{
+                {Key: "user_id", Value: userID},
+                {Key: "status", Value: models.GrantActive},
+                notDeleted,
+                {Key: "$or", Value: bson.A{
+                        bson.D{{Key: "valid_until", Value: bson.D{{Key: "$exists", Value: false}}}},
+                        bson.D{{Key: "valid_until", Value: nil}},
+                        bson.D{{Key: "valid_until", Value: bson.D{{Key: "$gt", Value: now}}}},
+                }},
+        }
+        return find[models.Grant](ctx, s.db.Collection(constants.GrantsCollection), f, nil)
+}</span>
+
+func (s *MongoStore) AppendAudit(ctx context.Context, e models.AuditEntry) error <span class="cov0" title="0">{
+        _, err := s.db.Collection(constants.AuditCollection).InsertOne(ctx, e)
+        return err
+}</span>
+
+func (s *MongoStore) ListAudit(ctx context.Context, limit, skip int64) ([]models.AuditEntry, error) <span class="cov0" title="0">{
+        return find[models.AuditEntry](ctx, s.db.Collection(constants.AuditCollection), bson.D{}, page("at", -1, limit, skip))
+}</span>
+
+func (s *MongoStore) Ping(ctx context.Context) error <span class="cov0" title="0">{ return s.db.Client().Ping(ctx, nil) }</span>
+
+func mapNoDoc(err error) error <span class="cov0" title="0">{
+        if errors.Is(err, mongo.ErrNoDocuments) </span><span class="cov0" title="0">{
+                return ErrNotFound
+        }</span>
+        <span class="cov0" title="0">return err</span>
+}
+</pre>
+		
+		<pre class="file" id="file7" style="display: none">// Package docs Code generated by swaggo/swag. DO NOT EDIT
+package docs
+
+import "github.com/swaggo/swag"
+
+const docTemplate = `{
+    "schemes": {{ marshal .Schemes }},
+    "swagger": "2.0",
+    "info": {
+        "description": "{{escape .Description}}",
+        "title": "{{.Title}}",
+        "termsOfService": "https://pilgrimagesoftware.com/terms/",
+        "contact": {
+            "name": "API Support",
+            "url": "https://sweetrpg.com",
+            "email": "admin@sweetrpg.com"
+        },
+        "license": {
+            "name": "MIT",
+            "url": "https://mit-license.org/"
+        },
+        "version": "{{.Version}}"
+    },
+    "host": "{{.Host}}",
+    "basePath": "{{.BasePath}}",
+    "paths": {
+        "/status/health": {
+            "get": {
+                "description": "Health check",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "status"
+                ],
+                "summary": "Health check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/vo.HealthResponseVO"
+                        }
+                    }
+                }
+            }
+        },
+        "/status/ping": {
+            "get": {
+                "description": "Ping",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "status"
+                ],
+                "summary": "Ping",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/vo.PingResponseVO"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "vo.HealthResponseVO": {
+            "type": "object",
+            "properties": {
+                "collections": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "database": {
+                    "type": "string"
+                },
+                "errors": {
+                    "type": "integer"
+                },
+                "messages": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "ping": {
+                    "type": "string"
+                }
+            }
+        },
+        "vo.PingResponseVO": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string"
+                },
+                "hostname": {
+                    "type": "string"
+                }
+            }
+        }
+    }
+}`
+
+// SwaggerInfo holds exported Swagger Info so clients can modify it
+var SwaggerInfo = &amp;swag.Spec{
+        Version:          "1.0",
+        Host:             "",
+        BasePath:         "",
+        Schemes:          []string{},
+        Title:            "Entitlements API service",
+        Description:      "Swagger APIs",
+        InfoInstanceName: "swagger",
+        SwaggerTemplate:  docTemplate,
+        LeftDelim:        "{{",
+        RightDelim:       "}}",
+}
+
+func init() <span class="cov0" title="0">{
+        swag.Register(SwaggerInfo.InstanceName(), SwaggerInfo)
+}</span>
+</pre>
+		
+		<pre class="file" id="file8" style="display: none">// Package models holds the entitlements catalog and grant documents.
+package models
+
+import (
+        "errors"
+        "fmt"
+        "math"
+        "regexp"
+        "time"
+
+        mcore "github.com/sweetrpg/model-core.go/models"
+        "go.mongodb.org/mongo-driver/bson/primitive"
+)
+
+// KeyType says how a key's value is interpreted.
+type KeyType string
+
+const (
+        // TypeFlag is a boolean; stored as 0 or 1.
+        TypeFlag KeyType = "flag"
+        // TypeLimit is a non-negative integer.
+        TypeLimit KeyType = "limit"
+)
+
+// Grant statuses and sources.
+const (
+        GrantActive = "active"
+        GrantEnded  = "ended"
+
+        SourceAdmin = "admin"
+)
+
+var (
+        keyPattern  = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$`)
+        tierPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+)
+
+// ErrInvalid marks a validation failure; its message is safe to show an administrator.
+var ErrInvalid = errors.New("invalid")
+
+// Key is a registered entitlement key. Type is immutable after creation.
+type Key struct {
+        ID              primitive.ObjectID `bson:"_id,omitempty" json:"-"`
+        Key             string             `bson:"key" json:"key"`
+        Type            KeyType            `bson:"type" json:"type"`
+        Description     string             `bson:"description" json:"description"`
+        TTLSeconds      int                `bson:"ttl_seconds" json:"ttl_seconds"`
+        mcore.Auditable `bson:",inline"`
+}
+
+// TierValue is one key's value inside a tier. Type is copied from the key at write time (key
+// types never change), so a tier can be rendered without loading the keys.
+type TierValue struct {
+        Key   string  `bson:"key"`
+        Type  KeyType `bson:"type"`
+        Value int64   `bson:"value"`
+}
+
+// Tier is a named bundle of key values.
+type Tier struct {
+        ID              primitive.ObjectID `bson:"_id,omitempty" json:"-"`
+        Slug            string             `bson:"slug" json:"id"`
+        Name            string             `bson:"name" json:"name"`
+        Description     string             `bson:"description" json:"description"`
+        Values          []TierValue        `bson:"values" json:"-"`
+        StripePriceID   string             `bson:"stripe_price_id,omitempty" json:"stripe_price_id,omitempty"`
+        mcore.Auditable `bson:",inline"`
+}
+
+// CatalogConfig is the singleton document naming the default tier.
+type CatalogConfig struct {
+        ID              string `bson:"_id"`
+        DefaultTierID   string `bson:"default_tier_id"`
+        mcore.Auditable `bson:",inline"`
+}
+
+// Grant gives a user a tier or a single key value. Exactly one of TierID or Key is set. Grants
+// are written by the billing flow and by admins; this service only reads them for checks.
+type Grant struct {
+        ID              primitive.ObjectID `bson:"_id,omitempty"`
+        UserID          string             `bson:"user_id"`
+        TierID          string             `bson:"tier_id,omitempty"`
+        Key             string             `bson:"key,omitempty"`
+        Value           int64              `bson:"value,omitempty"`
+        Source          string             `bson:"source"`
+        ExternalID      string             `bson:"external_id,omitempty"`
+        Status          string             `bson:"status"`
+        ValidUntil      *time.Time         `bson:"valid_until,omitempty"`
+        mcore.Auditable `bson:",inline"`
+}
+
+// ActiveAt reports whether the grant counts at now. The Mongo query in data.MongoStore applies
+// the same rule.
+func (g Grant) ActiveAt(now time.Time) bool <span class="cov6" title="4">{
+        return g.Status == GrantActive &amp;&amp; (g.ValidUntil == nil || g.ValidUntil.After(now))
+}</span>
+
+// AuditEntry records one catalog write. The collection is append-only.
+type AuditEntry struct {
+        ID      primitive.ObjectID `bson:"_id,omitempty" json:"-"`
+        At      time.Time          `bson:"at" json:"at"`
+        Actor   string             `bson:"actor" json:"actor"`
+        Action  string             `bson:"action" json:"action"`
+        Kind    string             `bson:"kind" json:"kind"`
+        Subject string             `bson:"subject" json:"subject"`
+        Before  any                `bson:"before,omitempty" json:"before,omitempty"`
+        After   any                `bson:"after,omitempty" json:"after,omitempty"`
+}
+
+// ValidateKeyName checks the namespaced key format, e.g. initiative.theme_slots.
+func ValidateKeyName(name string) error <span class="cov9" title="9">{
+        if len(name) &gt; 128 || !keyPattern.MatchString(name) </span><span class="cov8" title="7">{
+                return fmt.Errorf("%w: key must be namespaced lowercase, like service.feature_name", ErrInvalid)
+        }</span>
+        <span class="cov3" title="2">return nil</span>
+}
+
+// ValidateTierSlug checks a tier identifier.
+func ValidateTierSlug(slug string) error <span class="cov7" title="5">{
+        if !tierPattern.MatchString(slug) </span><span class="cov6" title="4">{
+                return fmt.Errorf("%w: tier id must be lowercase letters, digits, - or _ (max 64)", ErrInvalid)
+        }</span>
+        <span class="cov1" title="1">return nil</span>
+}
+
+// ParseValue converts a JSON value to its stored form: flags take true/false, limits take a
+// non-negative integer.
+func ParseValue(t KeyType, raw any) (int64, error) <span class="cov10" title="10">{
+        switch t </span>{
+        case TypeFlag:<span class="cov5" title="3">
+                b, ok := raw.(bool)
+                if !ok </span><span class="cov1" title="1">{
+                        return 0, fmt.Errorf("%w: flag values must be true or false", ErrInvalid)
+                }</span>
+                <span class="cov3" title="2">if b </span><span class="cov1" title="1">{
+                        return 1, nil
+                }</span>
+                <span class="cov1" title="1">return 0, nil</span>
+        case TypeLimit:<span class="cov8" title="6">
+                f, ok := raw.(float64)
+                if !ok || f &lt; 0 || f != math.Trunc(f) || f &gt; math.MaxInt32 </span><span class="cov6" title="4">{
+                        return 0, fmt.Errorf("%w: limit values must be non-negative integers", ErrInvalid)
+                }</span>
+                <span class="cov3" title="2">return int64(f), nil</span>
+        }
+        <span class="cov1" title="1">return 0, fmt.Errorf("%w: unknown key type %q", ErrInvalid, t)</span>
+}
+
+// FormatValue is the inverse of ParseValue.
+func FormatValue(t KeyType, v int64) any <span class="cov5" title="3">{
+        if t == TypeFlag </span><span class="cov3" title="2">{
+                return v &gt; 0
+        }</span>
+        <span class="cov1" title="1">return v</span>
+}
+</pre>
+		
+		<pre class="file" id="file9" style="display: none">package server
+
+import (
+        "net/http"
+        "strconv"
+
+        "github.com/gin-gonic/gin"
+        "github.com/sweetrpg/authz-client.go/authz"
+        "github.com/sweetrpg/entitlements-api/catalog"
+        "github.com/sweetrpg/entitlements-api/constants"
+        "github.com/sweetrpg/entitlements-api/models"
+        mcore "github.com/sweetrpg/model-core.go/models"
+)
+
+// TierVO is the API shape of a tier: values are rendered per key type (flags as booleans).
+type TierVO struct {
+        ID            string         `json:"id"`
+        Name          string         `json:"name"`
+        Description   string         `json:"description"`
+        Values        map[string]any `json:"values"`
+        StripePriceID string         `json:"stripe_price_id,omitempty"`
+        mcore.Auditable
+}
+
+func toTierVO(t models.Tier) TierVO <span class="cov7" title="8">{
+        values := make(map[string]any, len(t.Values))
+        for _, v := range t.Values </span><span class="cov8" title="11">{
+                values[v.Key] = models.FormatValue(v.Type, v.Value)
+        }</span>
+        <span class="cov7" title="8">return TierVO{ID: t.Slug, Name: t.Name, Description: t.Description, Values: values, StripePriceID: t.StripePriceID, Auditable: t.Auditable}</span>
+}
+
+type keyBody struct {
+        Key         string         `json:"key"`
+        Type        models.KeyType `json:"type"`
+        Description string         `json:"description"`
+        TTLSeconds  int            `json:"ttl_seconds"`
+}
+
+type tierBody struct {
+        ID            string         `json:"id"`
+        Name          string         `json:"name"`
+        Description   string         `json:"description"`
+        Values        map[string]any `json:"values"`
+        StripePriceID string         `json:"stripe_price_id"`
+}
+
+func (b tierBody) input(slug string) catalog.TierInput <span class="cov7" title="9">{
+        return catalog.TierInput{Slug: slug, Name: b.Name, Description: b.Description, Values: b.Values, StripePriceID: b.StripePriceID}
+}</span>
+
+// paging reads limit/skip query parameters, clamping limit to a sane page.
+func paging(c *gin.Context) (limit, skip int64) <span class="cov5" title="4">{
+        limit, _ = strconv.ParseInt(c.DefaultQuery("limit", "50"), 10, 64)
+        skip, _ = strconv.ParseInt(c.DefaultQuery("skip", "0"), 10, 64)
+        if limit &lt; 1 || limit &gt; 200 </span><span class="cov0" title="0">{
+                limit = 50
+        }</span>
+        <span class="cov5" title="4">if skip &lt; 0 </span><span class="cov0" title="0">{
+                skip = 0
+        }</span>
+        <span class="cov5" title="4">return limit, skip</span>
+}
+
+// setupAdminHandlers registers the catalog write and read routes. Every route requires a user
+// token carrying the admin role; the resolved canonical user ID is the audit actor.
+func setupAdminHandlers(g *gin.Engine, svc *catalog.Service, client *authz.Client) <span class="cov7" title="9">{
+        a := g.Group("/admin", authz.RequireAnyRole(client, constants.ServiceName, authz.RoleAdmin))
+
+        a.GET("/keys", func(c *gin.Context) </span><span class="cov3" title="2">{
+                limit, skip := paging(c)
+                keys, err := svc.ListKeys(c.Request.Context(), c.Query("prefix"), limit, skip)
+                respond(c, http.StatusOK, keys, err)
+        }</span>)
+        <span class="cov7" title="9">a.POST("/keys", func(c *gin.Context) </span><span class="cov8" title="14">{
+                var b keyBody
+                if c.ShouldBindJSON(&amp;b) != nil </span><span class="cov1" title="1">{
+                        badRequest(c, "malformed JSON body")
+                        return
+                }</span>
+                <span class="cov8" title="13">k, err := svc.CreateKey(c.Request.Context(), authz.Viewer(c), catalog.KeyInput{Key: b.Key, Type: b.Type, Description: b.Description, TTLSeconds: b.TTLSeconds})
+                respond(c, http.StatusCreated, k, err)</span>
+        })
+        <span class="cov7" title="9">a.PUT("/keys/:key", func(c *gin.Context) </span><span class="cov3" title="2">{
+                var b keyBody
+                if c.ShouldBindJSON(&amp;b) != nil </span><span class="cov0" title="0">{
+                        badRequest(c, "malformed JSON body")
+                        return
+                }</span>
+                <span class="cov3" title="2">k, err := svc.UpdateKey(c.Request.Context(), authz.Viewer(c), c.Param("key"), b.Description, b.TTLSeconds)
+                respond(c, http.StatusOK, k, err)</span>
+        })
+        <span class="cov7" title="9">a.DELETE("/keys/:key", func(c *gin.Context) </span><span class="cov3" title="2">{
+                respondEmpty(c, svc.DeleteKey(c.Request.Context(), authz.Viewer(c), c.Param("key")))
+        }</span>)
+
+        <span class="cov7" title="9">a.GET("/tiers", func(c *gin.Context) </span><span class="cov1" title="1">{
+                limit, skip := paging(c)
+                tiers, err := svc.ListTiers(c.Request.Context(), limit, skip)
+                vos := make([]TierVO, len(tiers))
+                for i, t := range tiers </span><span class="cov1" title="1">{
+                        vos[i] = toTierVO(t)
+                }</span>
+                <span class="cov1" title="1">respond(c, http.StatusOK, vos, err)</span>
+        })
+        <span class="cov7" title="9">a.POST("/tiers", func(c *gin.Context) </span><span class="cov6" title="7">{
+                var b tierBody
+                if c.ShouldBindJSON(&amp;b) != nil </span><span class="cov0" title="0">{
+                        badRequest(c, "malformed JSON body")
+                        return
+                }</span>
+                <span class="cov6" title="7">t, err := svc.CreateTier(c.Request.Context(), authz.Viewer(c), b.input(b.ID))
+                respondTier(c, http.StatusCreated, t, err)</span>
+        })
+        <span class="cov7" title="9">a.PUT("/tiers/:id", func(c *gin.Context) </span><span class="cov3" title="2">{
+                var b tierBody
+                if c.ShouldBindJSON(&amp;b) != nil </span><span class="cov0" title="0">{
+                        badRequest(c, "malformed JSON body")
+                        return
+                }</span>
+                <span class="cov3" title="2">t, err := svc.UpdateTier(c.Request.Context(), authz.Viewer(c), b.input(c.Param("id")))
+                respondTier(c, http.StatusOK, t, err)</span>
+        })
+        <span class="cov7" title="9">a.DELETE("/tiers/:id", func(c *gin.Context) </span><span class="cov1" title="1">{
+                respondEmpty(c, svc.DeleteTier(c.Request.Context(), authz.Viewer(c), c.Param("id")))
+        }</span>)
+
+        <span class="cov7" title="9">a.GET("/default-tier", func(c *gin.Context) </span><span class="cov1" title="1">{
+                id, err := svc.DefaultTier(c.Request.Context())
+                respond(c, http.StatusOK, gin.H{"id": id}, err)
+        }</span>)
+        <span class="cov7" title="9">a.PUT("/default-tier", func(c *gin.Context) </span><span class="cov7" title="8">{
+                var b struct {
+                        ID string `json:"id"`
+                }
+                if c.ShouldBindJSON(&amp;b) != nil || b.ID == "" </span><span class="cov1" title="1">{
+                        badRequest(c, "id is required")
+                        return
+                }</span>
+                <span class="cov6" title="7">respondEmpty(c, svc.SetDefaultTier(c.Request.Context(), authz.Viewer(c), b.ID))</span>
+        })
+
+        <span class="cov7" title="9">a.GET("/audit", func(c *gin.Context) </span><span class="cov1" title="1">{
+                limit, skip := paging(c)
+                entries, err := svc.ListAudit(c.Request.Context(), limit, skip)
+                respond(c, http.StatusOK, entries, err)
+        }</span>)
+}
+
+func respond(c *gin.Context, status int, body any, err error) <span class="cov10" title="20">{
+        if err != nil </span><span class="cov4" title="3">{
+                writeError(c, err)
+                return
+        }</span>
+        <span class="cov9" title="17">c.JSON(status, body)</span>
+}
+
+func respondTier(c *gin.Context, status int, t *models.Tier, err error) <span class="cov7" title="9">{
+        if err != nil </span><span class="cov3" title="2">{
+                writeError(c, err)
+                return
+        }</span>
+        <span class="cov6" title="7">c.JSON(status, toTierVO(*t))</span>
+}
+
+func respondEmpty(c *gin.Context, err error) <span class="cov7" title="10">{
+        if err != nil </span><span class="cov4" title="3">{
+                writeError(c, err)
+                return
+        }</span>
+        <span class="cov6" title="7">c.Status(http.StatusNoContent)</span>
+}
+</pre>
+		
+		<pre class="file" id="file10" style="display: none">package server
+
+import (
+        "fmt"
+        "net/http"
+
+        "github.com/gin-gonic/gin"
+        "github.com/sweetrpg/entitlements-api/catalog"
+        "github.com/sweetrpg/entitlements-api/constants"
+        "github.com/sweetrpg/entitlements-api/models"
+)
+
+// CheckVO is one key's effective value. Consumers may cache it for TTLSeconds.
+type CheckVO struct {
+        Key        string         `json:"key"`
+        Type       models.KeyType `json:"type"`
+        Value      any            `json:"value"`
+        TTLSeconds int            `json:"ttl_seconds"`
+}
+
+// BatchCheckVO is the response to a batch check.
+type BatchCheckVO struct {
+        UserID  string    `json:"user_id"`
+        Results []CheckVO `json:"results"`
+}
+
+type batchBody struct {
+        UserID string   `json:"user_id"`
+        Keys   []string `json:"keys"`
+        Prefix string   `json:"prefix"`
+}
+
+func toCheckVO(r catalog.Result) CheckVO <span class="cov8" title="6">{
+        return CheckVO{Key: r.Key, Type: r.Type, Value: models.FormatValue(r.Type, r.Value), TTLSeconds: r.TTLSeconds}
+}</span>
+
+// setupCheckHandlers registers the service-to-service check routes. Browsers and native clients
+// have no service credential and cannot reach them.
+func setupCheckHandlers(g *gin.Engine, svc *catalog.Service, tokens map[string]string) <span class="cov10" title="9">{
+        s := g.Group("/check", requireService(tokens))
+
+        s.GET("", func(c *gin.Context) </span><span class="cov8" title="6">{
+                userID, key := c.Query("user_id"), c.Query("key")
+                if userID == "" || key == "" </span><span class="cov3" title="2">{
+                        badRequest(c, "user_id and key are required")
+                        return
+                }</span>
+                <span class="cov6" title="4">results, err := svc.Check(c.Request.Context(), userID, []string{key})
+                if err != nil </span><span class="cov1" title="1">{
+                        writeError(c, err)
+                        return
+                }</span>
+                <span class="cov5" title="3">vo := toCheckVO(results[0])
+                c.Header("Cache-Control", cacheControl(vo.TTLSeconds))
+                c.JSON(http.StatusOK, vo)</span>
+        })
+
+        <span class="cov10" title="9">s.POST("/batch", func(c *gin.Context) </span><span class="cov8" title="7">{
+                var b batchBody
+                if c.ShouldBindJSON(&amp;b) != nil || b.UserID == "" </span><span class="cov1" title="1">{
+                        badRequest(c, "user_id is required")
+                        return
+                }</span>
+                <span class="cov8" title="6">if (len(b.Keys) == 0) == (b.Prefix == "") </span><span class="cov3" title="2">{
+                        badRequest(c, "provide either keys or prefix")
+                        return
+                }</span>
+                <span class="cov6" title="4">if len(b.Keys) &gt; constants.MaxBatchKeys </span><span class="cov1" title="1">{
+                        badRequest(c, fmt.Sprintf("at most %d keys per request", constants.MaxBatchKeys))
+                        return
+                }</span>
+                <span class="cov5" title="3">var results []catalog.Result
+                var err error
+                if b.Prefix != "" </span><span class="cov1" title="1">{
+                        results, err = svc.CheckPrefix(c.Request.Context(), b.UserID, b.Prefix)
+                }</span> else<span class="cov3" title="2"> {
+                        results, err = svc.Check(c.Request.Context(), b.UserID, b.Keys)
+                }</span>
+                <span class="cov5" title="3">if err != nil </span><span class="cov1" title="1">{
+                        writeError(c, err)
+                        return
+                }</span>
+                <span class="cov3" title="2">out := BatchCheckVO{UserID: b.UserID, Results: make([]CheckVO, len(results))}
+                for i, r := range results </span><span class="cov5" title="3">{
+                        out.Results[i] = toCheckVO(r)
+                }</span>
+                <span class="cov3" title="2">c.JSON(http.StatusOK, out)</span>
+        })
+}
+
+func cacheControl(ttl int) string <span class="cov5" title="3">{
+        if ttl &lt;= 0 </span><span class="cov1" title="1">{
+                return "no-store"
+        }</span>
+        <span class="cov3" title="2">return fmt.Sprintf("private, max-age=%d", ttl)</span>
+}
+</pre>
+		
+		<pre class="file" id="file11" style="display: none">package server
+
+import (
+        "errors"
+        "net/http"
+
+        "github.com/gin-gonic/gin"
+        apiv "github.com/sweetrpg/api-core.go/vo"
+        "github.com/sweetrpg/common.go/logging"
+        "github.com/sweetrpg/entitlements-api/catalog"
+        "github.com/sweetrpg/entitlements-api/models"
+)
+
+// writeError maps a service error to a response. Unexpected errors are logged and reported
+// without detail.
+func writeError(c *gin.Context, err error) <span class="cov10" title="10">{
+        var unknown catalog.UnknownKeysError
+        switch </span>{
+        case errors.Is(err, models.ErrInvalid):<span class="cov3" title="2">
+                c.JSON(http.StatusBadRequest, apiv.ErrorVO{Error: "invalid_request", Message: err.Error()})</span>
+        case errors.As(err, &amp;unknown):<span class="cov3" title="2">
+                c.JSON(http.StatusNotFound, apiv.ErrorVO{Error: "unknown_key", Message: err.Error()})</span>
+        case errors.Is(err, catalog.ErrNotFound):<span class="cov6" title="4">
+                c.JSON(http.StatusNotFound, apiv.ErrorVO{Error: "not_found", Message: "not found"})</span>
+        case errors.Is(err, catalog.ErrDuplicate):<span class="cov1" title="1">
+                c.JSON(http.StatusConflict, apiv.ErrorVO{Error: "duplicate", Message: "already exists"})</span>
+        case errors.Is(err, catalog.ErrInUse):<span class="cov1" title="1">
+                c.JSON(http.StatusConflict, apiv.ErrorVO{Error: "in_use", Message: err.Error()})</span>
+        default:<span class="cov0" title="0">
+                logging.Logger.Error("request failed", "error", err.Error())
+                c.JSON(http.StatusInternalServerError, apiv.ErrorVO{Error: "internal_error", Message: "internal error"})</span>
+        }
+}
+
+func badRequest(c *gin.Context, msg string) <span class="cov9" title="8">{
+        c.JSON(http.StatusBadRequest, apiv.ErrorVO{Error: "invalid_request", Message: msg})
+}</span>
+</pre>
+		
+		<pre class="file" id="file12" style="display: none">package server
+
+import (
+        "github.com/gin-gonic/gin"
+        "github.com/sweetrpg/authz-client.go/authz"
+        "github.com/sweetrpg/entitlements-api/catalog"
+        "github.com/sweetrpg/entitlements-api/config"
+)
+
+// SetupHandlers wires every route.
+func SetupHandlers(g *gin.Engine, svc *catalog.Service, authzClient *authz.Client, cfg *config.Config) <span class="cov10" title="9">{
+        setupAdminHandlers(g, svc, authzClient)
+        setupCheckHandlers(g, svc, cfg.ServiceTokens)
+        setupStatusHandlers(g)
+}</span>
+</pre>
+		
+		<pre class="file" id="file13" style="display: none">package server
+
+import (
+        "crypto/subtle"
+        "net/http"
+        "strings"
+
+        "github.com/gin-gonic/gin"
+        apiv "github.com/sweetrpg/api-core.go/vo"
+        "github.com/sweetrpg/common.go/logging"
+)
+
+const callerContextKey = "entitlements.caller"
+
+// requireService admits only callers presenting a registered service token and records the
+// service name in the context. Every registered token is compared (no early exit) so timing
+// does not reveal which one matched.
+func requireService(tokens map[string]string) gin.HandlerFunc <span class="cov7" title="9">{
+        return func(c *gin.Context) </span><span class="cov10" title="17">{
+                presented, ok := strings.CutPrefix(c.GetHeader("Authorization"), "Bearer ")
+                caller := ""
+                if ok &amp;&amp; presented != "" </span><span class="cov9" title="15">{
+                        for token, name := range tokens </span><span class="cov9" title="15">{
+                                if subtle.ConstantTimeCompare([]byte(presented), []byte(token)) == 1 </span><span class="cov9" title="13">{
+                                        caller = name
+                                }</span>
+                        }
+                }
+                <span class="cov10" title="17">if caller == "" </span><span class="cov5" title="4">{
+                        c.AbortWithStatusJSON(http.StatusUnauthorized, apiv.ErrorVO{Error: "unauthorized", Message: "missing or invalid service credential"})
+                        return
+                }</span>
+                <span class="cov9" title="13">logging.Logger.Debug("entitlement check caller", "service", caller)
+                c.Set(callerContextKey, caller)
+                c.Next()</span>
+        }
+}
+</pre>
+		
+		<pre class="file" id="file14" style="display: none">package server
+
+import (
+        "net/http"
+
+        "github.com/gin-gonic/gin"
+        apicores "github.com/sweetrpg/api-core.go/server"
+        _ "github.com/sweetrpg/api-core.go/vo"
+        "github.com/sweetrpg/common.go/logging"
+)
+
+func setupStatusHandlers(g *gin.Engine) <span class="cov10" title="9">{
+        logging.Logger.Info("Setting up status endpoint handlers...")
+
+        </span><span class="cov10" title="9">{
+                a := g.Group("/status")
+                a.GET("/health", healthHandler)
+        }</span>
+
+        <span class="cov10" title="9">g.GET("/status/ping", pingHandler)</span>
+}
+
+// Health check.
+//
+//         Do a health check of the application and its dependencies and return the results
+//                @Summary                Health check
+//                @Description        Health check
+//                @Tags                        status
+//                @Produce                json
+//                @Success                200                {object}        vo.HealthResponseVO
+//                @Router                        /status/health [get]
+func healthHandler(c *gin.Context) <span class="cov0" title="0">{
+        resp := apicores.HealthHandler(c.Request.Context())
+        status := http.StatusOK
+        if resp.Errors &gt; 0 </span><span class="cov0" title="0">{
+                status = http.StatusServiceUnavailable
+        }</span>
+        <span class="cov0" title="0">c.JSON(status, resp)</span>
+}
+
+// Ping the application.
+//
+//         A shallow health check to see if basic responses are working. Returns the date and hostname of the server handling the request.
+//                @Summary                Ping
+//                @Description        Ping
+//                @Tags                        status
+//                @Produce                json
+//                @Success                200                {object}        vo.PingResponseVO
+//                @Router                        /status/ping [get]
+func pingHandler(c *gin.Context) <span class="cov1" title="1">{
+        c.JSON(http.StatusOK, apicores.PingHandler())
+}</span>
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
