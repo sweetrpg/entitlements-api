@@ -73,7 +73,7 @@
 				
 				<option value="file8">github.com/sweetrpg/entitlements-api/config/config.go (100.0%)</option>
 				
-				<option value="file9">github.com/sweetrpg/entitlements-api/data/memory.go (0.0%)</option>
+				<option value="file9">github.com/sweetrpg/entitlements-api/data/memory.go (34.1%)</option>
 				
 				<option value="file10">github.com/sweetrpg/entitlements-api/data/mongo.go (0.0%)</option>
 				
@@ -1367,10 +1367,10 @@ type MemoryStore struct {
 }
 
 // NewMemoryStore returns an empty store using the wall clock.
-func NewMemoryStore() *MemoryStore <span class="cov0" title="0">{ return &amp;MemoryStore{now: time.Now} }</span>
+func NewMemoryStore() *MemoryStore <span class="cov10" title="7">{ return &amp;MemoryStore{now: time.Now} }</span>
 
 // AddGrant seeds a grant for tests.
-func (m *MemoryStore) AddGrant(g models.Grant) <span class="cov0" title="0">{
+func (m *MemoryStore) AddGrant(g models.Grant) <span class="cov9" title="6">{
         m.mu.Lock()
         defer m.mu.Unlock()
         m.grants = append(m.grants, g)
@@ -1533,97 +1533,97 @@ func (m *MemoryStore) SetDefaultTierID(_ context.Context, slug, _ string) error 
         return nil
 }</span>
 
-func (m *MemoryStore) ActiveGrants(_ context.Context, userID string, now time.Time) ([]models.Grant, error) <span class="cov0" title="0">{
+func (m *MemoryStore) ActiveGrants(_ context.Context, userID string, now time.Time) ([]models.Grant, error) <span class="cov1" title="1">{
         m.mu.Lock()
         defer m.mu.Unlock()
         var out []models.Grant
-        for _, g := range m.grants </span><span class="cov0" title="0">{
-                if g.UserID == userID &amp;&amp; g.ActiveAt(now) </span><span class="cov0" title="0">{
+        for _, g := range m.grants </span><span class="cov9" title="6">{
+                if g.UserID == userID &amp;&amp; g.ActiveAt(now) </span><span class="cov4" title="2">{
                         out = append(out, g)
                 }</span>
         }
-        <span class="cov0" title="0">return out, nil</span>
+        <span class="cov1" title="1">return out, nil</span>
 }
 
-func (m *MemoryStore) GrantByExternal(_ context.Context, source, externalID string) (*models.Grant, error) <span class="cov0" title="0">{
+func (m *MemoryStore) GrantByExternal(_ context.Context, source, externalID string) (*models.Grant, error) <span class="cov6" title="3">{
         m.mu.Lock()
         defer m.mu.Unlock()
-        for _, g := range m.grants </span><span class="cov0" title="0">{
-                if g.Source == source &amp;&amp; g.ExternalID == externalID </span><span class="cov0" title="0">{
+        for _, g := range m.grants </span><span class="cov6" title="3">{
+                if g.Source == source &amp;&amp; g.ExternalID == externalID </span><span class="cov4" title="2">{
                         c := g
                         return &amp;c, nil
                 }</span>
         }
-        <span class="cov0" title="0">return nil, ErrNotFound</span>
+        <span class="cov1" title="1">return nil, ErrNotFound</span>
 }
 
-func (m *MemoryStore) GrantsByRef(_ context.Context, ref string) ([]models.Grant, error) <span class="cov0" title="0">{
+func (m *MemoryStore) GrantsByRef(_ context.Context, ref string) ([]models.Grant, error) <span class="cov7" title="4">{
         m.mu.Lock()
         defer m.mu.Unlock()
         var out []models.Grant
-        for _, g := range m.grants </span><span class="cov0" title="0">{
-                if g.ExternalID == ref || slices.Contains(g.Refs, ref) </span><span class="cov0" title="0">{
+        for _, g := range m.grants </span><span class="cov7" title="4">{
+                if g.ExternalID == ref || slices.Contains(g.Refs, ref) </span><span class="cov6" title="3">{
                         out = append(out, g)
                 }</span>
         }
-        <span class="cov0" title="0">return out, nil</span>
+        <span class="cov7" title="4">return out, nil</span>
 }
 
-func (m *MemoryStore) InsertGrant(_ context.Context, g *models.Grant, actor string) error <span class="cov0" title="0">{
+func (m *MemoryStore) InsertGrant(_ context.Context, g *models.Grant, actor string) error <span class="cov8" title="5">{
         m.mu.Lock()
         defer m.mu.Unlock()
-        for _, e := range m.grants </span><span class="cov0" title="0">{
-                if g.ExternalID != "" &amp;&amp; e.Source == g.Source &amp;&amp; e.ExternalID == g.ExternalID </span><span class="cov0" title="0">{
+        for _, e := range m.grants </span><span class="cov1" title="1">{
+                if g.ExternalID != "" &amp;&amp; e.Source == g.Source &amp;&amp; e.ExternalID == g.ExternalID </span><span class="cov1" title="1">{
                         return ErrDuplicate
                 }</span>
         }
-        <span class="cov0" title="0">mcore.StampCreate(&amp;g.Auditable, actor, m.now().UTC())
+        <span class="cov7" title="4">mcore.StampCreate(&amp;g.Auditable, actor, m.now().UTC())
         m.grants = append(m.grants, *g)
         return nil</span>
 }
 
-func (m *MemoryStore) UpdateGrant(_ context.Context, g *models.Grant, actor string) error <span class="cov0" title="0">{
+func (m *MemoryStore) UpdateGrant(_ context.Context, g *models.Grant, actor string) error <span class="cov4" title="2">{
         m.mu.Lock()
         defer m.mu.Unlock()
-        for i, e := range m.grants </span><span class="cov0" title="0">{
-                if e.Source == g.Source &amp;&amp; e.ExternalID == g.ExternalID </span><span class="cov0" title="0">{
+        for i, e := range m.grants </span><span class="cov4" title="2">{
+                if e.Source == g.Source &amp;&amp; e.ExternalID == g.ExternalID </span><span class="cov1" title="1">{
                         mcore.StampUpdate(&amp;g.Auditable, actor, m.now().UTC())
                         m.grants[i] = *g
                         return nil
                 }</span>
         }
-        <span class="cov0" title="0">return ErrNotFound</span>
+        <span class="cov1" title="1">return ErrNotFound</span>
 }
 
-func (m *MemoryStore) StripeCustomer(_ context.Context, userID string) (string, error) <span class="cov0" title="0">{
+func (m *MemoryStore) StripeCustomer(_ context.Context, userID string) (string, error) <span class="cov4" title="2">{
         m.mu.Lock()
         defer m.mu.Unlock()
         return m.custs[userID], nil
 }</span>
 
-func (m *MemoryStore) SaveStripeCustomer(_ context.Context, userID, customerID, _ string) error <span class="cov0" title="0">{
+func (m *MemoryStore) SaveStripeCustomer(_ context.Context, userID, customerID, _ string) error <span class="cov4" title="2">{
         m.mu.Lock()
         defer m.mu.Unlock()
-        if m.custs == nil </span><span class="cov0" title="0">{
+        if m.custs == nil </span><span class="cov1" title="1">{
                 m.custs = map[string]string{}
         }</span>
-        <span class="cov0" title="0">m.custs[userID] = customerID
+        <span class="cov4" title="2">m.custs[userID] = customerID
         return nil</span>
 }
 
-func (m *MemoryStore) EventProcessed(_ context.Context, eventID string) (bool, error) <span class="cov0" title="0">{
+func (m *MemoryStore) EventProcessed(_ context.Context, eventID string) (bool, error) <span class="cov4" title="2">{
         m.mu.Lock()
         defer m.mu.Unlock()
         return m.events[eventID], nil
 }</span>
 
-func (m *MemoryStore) RecordEvent(_ context.Context, eventID, _ string, _ time.Time) error <span class="cov0" title="0">{
+func (m *MemoryStore) RecordEvent(_ context.Context, eventID, _ string, _ time.Time) error <span class="cov4" title="2">{
         m.mu.Lock()
         defer m.mu.Unlock()
-        if m.events == nil </span><span class="cov0" title="0">{
+        if m.events == nil </span><span class="cov1" title="1">{
                 m.events = map[string]bool{}
         }</span>
-        <span class="cov0" title="0">m.events[eventID] = true
+        <span class="cov4" title="2">m.events[eventID] = true
         return nil</span>
 }
 
