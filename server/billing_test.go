@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,8 +12,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stripe/stripe-go/v87/webhook"
 	"github.com/sweetrpg/entitlements-api/billing"
+	"github.com/sweetrpg/entitlements-api/catalog"
 	"github.com/sweetrpg/entitlements-api/models"
 )
 
@@ -146,5 +150,37 @@ func TestTokenEmail(t *testing.T) {
 		if got := tokenEmail(tok); got != want {
 			t.Errorf("tokenEmail(%q) = %q, want %q", tok, got, want)
 		}
+	}
+}
+
+func TestMaxExceededIsA409WithUnitsRemaining(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	writeError(c, fmt.Errorf("wrapped: %w", catalog.MaxExceededError{Key: "initiative.sessions_per_gm", Remaining: 2}))
+	mustCode(t, rec, http.StatusConflict)
+	var vo MaxExceededVO
+	_ = json.Unmarshal(rec.Body.Bytes(), &vo)
+	if vo.Error != "exceeds_maximum" || vo.UnitsRemaining != 2 || vo.Key != "initiative.sessions_per_gm" {
+		t.Errorf("body = %+v", vo)
+	}
+}
+
+func TestAdminCanSetAndClearAKeyMaximum(t *testing.T) {
+	r, _ := newRouter(t)
+	rec := do(r, "POST", "/admin/keys", adminTok, `{"key":"a.cap","type":"limit","max":5}`)
+	mustCode(t, rec, http.StatusCreated)
+	var k models.Key
+	_ = json.Unmarshal(rec.Body.Bytes(), &k)
+	if k.Max == nil || *k.Max != 5 {
+		t.Fatalf("max = %v", k.Max)
+	}
+	mustCode(t, do(r, "POST", "/admin/keys", adminTok, `{"key":"a.flag","type":"flag","max":5}`), http.StatusBadRequest)
+	rec = do(r, "PUT", "/admin/keys/a.cap", adminTok, `{"description":"d"}`)
+	mustCode(t, rec, http.StatusOK)
+	k = models.Key{}
+	_ = json.Unmarshal(rec.Body.Bytes(), &k)
+	if k.Max != nil {
+		t.Errorf("max after clearing = %v", *k.Max)
 	}
 }

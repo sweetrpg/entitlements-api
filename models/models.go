@@ -45,11 +45,13 @@ var ErrInvalid = errors.New("invalid")
 
 // Key is a registered entitlement key. Type is immutable after creation.
 type Key struct {
-	ID              primitive.ObjectID `bson:"_id,omitempty" json:"-"`
-	Key             string             `bson:"key" json:"key"`
-	Type            KeyType            `bson:"type" json:"type"`
-	Description     string             `bson:"description" json:"description"`
-	TTLSeconds      int                `bson:"ttl_seconds" json:"ttl_seconds"`
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"-"`
+	Key         string             `bson:"key" json:"key"`
+	Type        KeyType            `bson:"type" json:"type"`
+	Description string             `bson:"description" json:"description"`
+	TTLSeconds  int                `bson:"ttl_seconds" json:"ttl_seconds"`
+	// Max caps every effective value of a limit key; nil means no maximum.
+	Max             *int64 `bson:"max,omitempty" json:"max,omitempty"`
 	mcore.Auditable `bson:",inline"`
 }
 
@@ -134,6 +136,21 @@ func ValidateKeyName(name string) error {
 func ValidateTierSlug(slug string) error {
 	if !tierPattern.MatchString(slug) {
 		return fmt.Errorf("%w: tier id must be lowercase letters, digits, - or _ (max 64)", ErrInvalid)
+	}
+	return nil
+}
+
+// ValidateMax checks a key's maximum: only limit keys carry one, and it must be a positive
+// integer that fits a limit value.
+func ValidateMax(t KeyType, max *int64) error {
+	if max == nil {
+		return nil
+	}
+	if t != TypeLimit {
+		return fmt.Errorf("%w: only limit keys can have a maximum", ErrInvalid)
+	}
+	if *max < 1 || *max > math.MaxInt32 {
+		return fmt.Errorf("%w: maximum must be between 1 and %d", ErrInvalid, math.MaxInt32)
 	}
 	return nil
 }

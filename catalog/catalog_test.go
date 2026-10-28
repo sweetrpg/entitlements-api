@@ -92,14 +92,14 @@ func TestDeletedKeyCanBeRecreated(t *testing.T) {
 func TestUpdateKey(t *testing.T) {
 	s, _ := newSvc(t)
 	seed(t, s)
-	k, err := s.UpdateKey(ctx, "admin2", "initiative.deluxe", "new desc", 30)
+	k, err := s.UpdateKey(ctx, "admin2", "initiative.deluxe", "new desc", 30, nil)
 	if err != nil || k.Description != "new desc" || k.TTLSeconds != 30 || k.UpdatedBy != "admin2" || k.CreatedBy != "admin" {
 		t.Errorf("k = %+v err = %v", k, err)
 	}
-	if _, err := s.UpdateKey(ctx, "admin", "nope.nope", "", 0); !errors.Is(err, ErrNotFound) {
+	if _, err := s.UpdateKey(ctx, "admin", "nope.nope", "", 0, nil); !errors.Is(err, ErrNotFound) {
 		t.Errorf("missing = %v", err)
 	}
-	if _, err := s.UpdateKey(ctx, "admin", "initiative.deluxe", "", -5); !errors.Is(err, models.ErrInvalid) {
+	if _, err := s.UpdateKey(ctx, "admin", "initiative.deluxe", "", -5, nil); !errors.Is(err, models.ErrInvalid) {
 		t.Errorf("bad ttl = %v", err)
 	}
 }
@@ -164,7 +164,7 @@ func TestSetDefaultTierRequiresExistingTier(t *testing.T) {
 func TestEveryWriteIsAudited(t *testing.T) {
 	s, _ := newSvc(t)
 	seed(t, s)
-	_, _ = s.UpdateKey(ctx, "admin", "initiative.deluxe", "d", 0)
+	_, _ = s.UpdateKey(ctx, "admin", "initiative.deluxe", "d", 0, nil)
 	_ = s.DeleteKey(ctx, "admin", "initiative.deluxe")
 	entries, _ := s.ListAudit(ctx, 100, 0)
 	// 2 key creates + 2 tier creates + set_default + update + delete

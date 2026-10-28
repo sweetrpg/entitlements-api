@@ -11,11 +11,22 @@ import (
 	"github.com/sweetrpg/entitlements-api/models"
 )
 
+// MaxExceededVO is the 409 body when a purchase would pass a key's maximum.
+type MaxExceededVO struct {
+	Error          string `json:"error"`
+	Message        string `json:"message"`
+	Key            string `json:"key"`
+	UnitsRemaining int64  `json:"units_remaining"`
+}
+
 // writeError maps a service error to a response. Unexpected errors are logged and reported
 // without detail.
 func writeError(c *gin.Context, err error) {
 	var unknown catalog.UnknownKeysError
+	var exceeded catalog.MaxExceededError
 	switch {
+	case errors.As(err, &exceeded):
+		c.JSON(http.StatusConflict, MaxExceededVO{Error: "exceeds_maximum", Message: err.Error(), Key: exceeded.Key, UnitsRemaining: exceeded.Remaining})
 	case errors.Is(err, models.ErrInvalid):
 		c.JSON(http.StatusBadRequest, apiv.ErrorVO{Error: "invalid_request", Message: err.Error()})
 	case errors.As(err, &unknown):

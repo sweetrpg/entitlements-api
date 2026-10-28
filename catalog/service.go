@@ -39,6 +39,8 @@ type KeyInput struct {
 	Type        models.KeyType
 	Description string
 	TTLSeconds  int
+	// Max caps a limit key's effective value; nil means no maximum.
+	Max *int64
 }
 
 // TierInput is the writable part of a tier. Values maps key name to a JSON bool or number.
@@ -82,15 +84,19 @@ func (s *Service) CreateKey(ctx context.Context, actor string, in KeyInput) (*mo
 	if err := validateTTL(in.TTLSeconds); err != nil {
 		return nil, err
 	}
-	k := &models.Key{Key: in.Key, Type: in.Type, Description: in.Description, TTLSeconds: in.TTLSeconds}
+	if err := models.ValidateMax(in.Type, in.Max); err != nil {
+		return nil, err
+	}
+	k := &models.Key{Key: in.Key, Type: in.Type, Description: in.Description, TTLSeconds: in.TTLSeconds, Max: in.Max}
 	if err := s.store.InsertKey(ctx, k, actor); err != nil {
 		return nil, err
 	}
 	return k, s.audit(ctx, actor, "create", "key", k.Key, nil, k)
 }
 
-// UpdateKey changes a key's description and TTL. Its type cannot change.
-func (s *Service) UpdateKey(ctx context.Context, actor, name, description string, ttl int) (*models.Key, error) {
+// UpdateKey changes a key's description, TTL, and maximum (nil removes the maximum). Its type
+// cannot change.
+func (s *Service) UpdateKey(ctx context.Context, actor, name, description string, ttl int, max *int64) (*models.Key, error) {
 	if err := validateTTL(ttl); err != nil {
 		return nil, err
 	}
@@ -101,7 +107,10 @@ func (s *Service) UpdateKey(ctx context.Context, actor, name, description string
 	if len(before) == 0 {
 		return nil, ErrNotFound
 	}
-	k, err := s.store.UpdateKey(ctx, name, description, ttl, actor)
+	if err := models.ValidateMax(before[0].Type, max); err != nil {
+		return nil, err
+	}
+	k, err := s.store.UpdateKey(ctx, name, description, ttl, max, actor)
 	if err != nil {
 		return nil, err
 	}
