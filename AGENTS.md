@@ -50,6 +50,9 @@ go test -race ./...
 - **Auth:** zero trust. Checks require the end user's bearer token, verified through auth-api
   (Auth0) with the canonical user ID resolved via users-api. No service tokens, and no user ID
   taken from the request.
+- **Checks:** `GET /check?key=` and `GET /check/batch` (repeated `key`, or `prefix`; exactly one).
+  Both are GETs so consumers can cache them; an unknown key fails the whole batch with 404. Caps
+  live in `constants` (`MaxBatchKeys`, `MaxPrefixLength`).
 - **Audit:** catalog writes and their audit entry are not one transaction. A failed audit append
   is logged at ERROR and the write still succeeds.
 - **Delete strategy:** catalog keys and tiers are soft-deleted; the audit collection is
