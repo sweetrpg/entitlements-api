@@ -1,3 +1,16 @@
+## [0.2.0] - 2026-10-28
+
+### 🚀 Features
+
+- *(billing)* Add Stripe checkout, billing portal, and signed webhook
+
+### 🧪 Testing
+
+- *(data)* Cover grant, customer, and event methods of the in-memory store
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Merge master into develop after v0.1.0
 ## [0.1.0] - 2026-10-28
 
 ### 🚀 Features
