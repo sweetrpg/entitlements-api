@@ -42,8 +42,6 @@ spec:
                 name: api-db
             - secretRef:
                 name: api-cache
-            - secretRef:
-                name: api-misc
             # Optional until the Stripe item exists in Akeyless, so the pod starts before billing is wired.
             - secretRef:
                 name: api-stripe
