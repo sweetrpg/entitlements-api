@@ -95,14 +95,21 @@ func (s *MongoStore) ListKeys(ctx context.Context, prefix string, limit, skip in
 	return find[models.Key](ctx, s.db.Collection(constants.KeysCollection), f, page("key", 1, limit, skip))
 }
 
-func (s *MongoStore) UpdateKey(ctx context.Context, name, description string, ttl int, actor string) (*models.Key, error) {
+func (s *MongoStore) UpdateKey(ctx context.Context, name, description string, ttl int, max *int64, actor string) (*models.Key, error) {
 	set := bson.D{
 		{Key: "description", Value: description}, {Key: "ttl_seconds", Value: ttl},
 		{Key: "updated_at", Value: time.Now().UTC()}, {Key: "updated_by", Value: actor},
 	}
+	update := bson.D{{Key: "$set", Value: set}}
+	if max == nil {
+		update = append(update, bson.E{Key: "$unset", Value: bson.D{{Key: "max", Value: ""}}})
+	} else {
+		set = append(set, bson.E{Key: "max", Value: *max})
+		update = bson.D{{Key: "$set", Value: set}}
+	}
 	var out models.Key
 	err := s.db.Collection(constants.KeysCollection).
-		FindOneAndUpdate(ctx, bson.D{notDeleted, {Key: "key", Value: name}}, bson.D{{Key: "$set", Value: set}},
+		FindOneAndUpdate(ctx, bson.D{notDeleted, {Key: "key", Value: name}}, update,
 			options.FindOneAndUpdate().SetReturnDocument(options.After)).Decode(&out)
 	return &out, mapNoDoc(err)
 }

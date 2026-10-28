@@ -83,14 +83,14 @@ func (m *MemoryStore) ListKeys(_ context.Context, prefix string, limit, skip int
 	return window(out, limit, skip), nil
 }
 
-func (m *MemoryStore) UpdateKey(_ context.Context, name, description string, ttl int, actor string) (*models.Key, error) {
+func (m *MemoryStore) UpdateKey(_ context.Context, name, description string, ttl int, max *int64, actor string) (*models.Key, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	k := m.findKey(name)
 	if k == nil {
 		return nil, ErrNotFound
 	}
-	k.Description, k.TTLSeconds = description, ttl
+	k.Description, k.TTLSeconds, k.Max = description, ttl, max
 	mcore.StampUpdate(&k.Auditable, actor, m.now().UTC())
 	c := *k
 	return &c, nil

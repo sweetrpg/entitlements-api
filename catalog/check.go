@@ -47,7 +47,30 @@ func (s *Service) CheckPrefix(ctx context.Context, userID, prefix string) ([]Res
 	return s.resolveKeys(ctx, userID, names, keys)
 }
 
+// resolveKeys returns clamped effective values: a limit key with a maximum never reports more.
 func (s *Service) resolveKeys(ctx context.Context, userID string, names []string, keys []models.Key) ([]Result, error) {
+	byName, values, err := s.rawValues(ctx, userID, names, keys)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Result, 0, len(names))
+	for _, n := range names {
+		k := byName[n]
+		out = append(out, Result{Key: n, Type: k.Type, Value: clamp(k, values[n]), TTLSeconds: k.TTLSeconds})
+	}
+	return out, nil
+}
+
+func clamp(k models.Key, v int64) int64 {
+	if k.Max != nil && v > *k.Max {
+		return *k.Max
+	}
+	return v
+}
+
+// rawValues resolves the unclamped effective value of each key. Any name missing from keys fails
+// the call with UnknownKeysError.
+func (s *Service) rawValues(ctx context.Context, userID string, names []string, keys []models.Key) (map[string]models.Key, map[string]int64, error) {
 	byName := make(map[string]models.Key, len(keys))
 	for _, k := range keys {
 		byName[k.Key] = k
@@ -59,30 +82,24 @@ func (s *Service) resolveKeys(ctx context.Context, userID string, names []string
 		}
 	}
 	if len(unknown) > 0 {
-		return nil, UnknownKeysError{Keys: unknown}
+		return nil, nil, UnknownKeysError{Keys: unknown}
 	}
 
 	now := s.now().UTC()
 	grants, err := s.store.ActiveGrants(ctx, userID, now)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	tiers, err := s.loadTiers(ctx, grants)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	types := make(map[string]models.KeyType, len(byName))
 	for n, k := range byName {
 		types[n] = k.Type
 	}
-	values := Resolve(tiers.def, tiers.granted, grants, types, now)
-	out := make([]Result, 0, len(names))
-	for _, n := range names {
-		k := byName[n]
-		out = append(out, Result{Key: n, Type: k.Type, Value: values[n], TTLSeconds: k.TTLSeconds})
-	}
-	return out, nil
+	return byName, Resolve(tiers.def, tiers.granted, grants, types, now), nil
 }
 
 type loadedTiers struct {

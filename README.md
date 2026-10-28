@@ -31,6 +31,11 @@ whole batch. A batch with both or neither of `key`/`prefix` returns 400 `invalid
 key. A flag is on when its tier value is on or any key-level grant is active. Tiers are
 alternatives; purchased units (key-level grants) add, and each ends independently.
 
+A limit key can carry a `max` (set through `/admin/keys`, absent means none). Every check clamps
+the effective value to it, so a user never sees more than the maximum. `catalog.CheckPurchase`
+refuses units that would pass it and returns how many remain; the HTTP error is 409
+`exceeds_maximum` with `units_remaining`.
+
 ## Auth
 
 Zero trust: every call carries the end user's own bearer token. auth-api verifies it against Auth0

@@ -29,7 +29,7 @@ type Store interface {
 	GetKeys(ctx context.Context, names []string) ([]models.Key, error)
 	// ListKeys returns live keys whose name starts with prefix, ordered by name.
 	ListKeys(ctx context.Context, prefix string, limit, skip int64) ([]models.Key, error)
-	UpdateKey(ctx context.Context, name, description string, ttlSeconds int, actor string) (*models.Key, error)
+	UpdateKey(ctx context.Context, name, description string, ttlSeconds int, max *int64, actor string) (*models.Key, error)
 	DeleteKey(ctx context.Context, name, actor string) error
 
 	InsertTier(ctx context.Context, t *models.Tier, actor string) error
