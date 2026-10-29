@@ -1,3 +1,19 @@
+## [0.4.0] - 2026-10-29
+
+### 🚀 Features
+
+- *(catalog)* Add add and at_least entitlement modes
+- *(billing)* Add plan groups that switch a subscription
+- *(seed)* Add a per-environment Stripe price overlay
+
+### 🐛 Bug Fixes
+
+- *(seed)* Treat Stripe price IDs as opaque and add Members 10
+- *(data)* Use a partial index filter MongoDB accepts
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Merge master into develop after v0.3.0
 ## [0.3.0] - 2026-10-28
 
 ### 🚀 Features
