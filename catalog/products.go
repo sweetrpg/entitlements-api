@@ -106,6 +106,11 @@ func (s *Service) CreateProduct(ctx context.Context, actor string, in ProductInp
 	if err != nil {
 		return nil, err
 	}
+	if existing, err := s.store.GetProducts(ctx, []string{p.Slug}); err != nil {
+		return nil, err
+	} else if len(existing) > 0 {
+		return nil, ErrDuplicate
+	}
 	if err := s.store.InsertProduct(ctx, p, actor); err != nil {
 		return nil, err
 	}

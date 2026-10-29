@@ -329,3 +329,55 @@ func TestAuditFailureDoesNotFailTheWrite(t *testing.T) {
 		t.Errorf("keys = %d", len(keys))
 	}
 }
+
+// noUniqueStore accepts a duplicate insert, the way MongoDB does when its unique index does not
+// exist. The service must still reject duplicates on its own.
+type noUniqueStore struct{ *data.MemoryStore }
+
+func (n noUniqueStore) InsertKey(ctx context.Context, k *models.Key, actor string) error {
+	if err := n.MemoryStore.InsertKey(ctx, k, actor); err != nil && !errors.Is(err, data.ErrDuplicate) {
+		return err
+	}
+	return nil
+}
+
+func (n noUniqueStore) InsertTier(ctx context.Context, t *models.Tier, actor string) error {
+	if err := n.MemoryStore.InsertTier(ctx, t, actor); err != nil && !errors.Is(err, data.ErrDuplicate) {
+		return err
+	}
+	return nil
+}
+
+func (n noUniqueStore) InsertProduct(ctx context.Context, p *models.Product, actor string) error {
+	if err := n.MemoryStore.InsertProduct(ctx, p, actor); err != nil && !errors.Is(err, data.ErrDuplicate) {
+		return err
+	}
+	return nil
+}
+
+func TestDuplicatesAreRejectedWithoutADatabaseUniqueIndex(t *testing.T) {
+	s := New(noUniqueStore{data.NewMemoryStore()})
+	if _, err := s.CreateKey(ctx, "admin", KeyInput{Key: "a.b", Type: models.TypeFlag}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateKey(ctx, "admin", KeyInput{Key: "a.b", Type: models.TypeFlag}); !errors.Is(err, ErrDuplicate) {
+		t.Errorf("duplicate key: err = %v", err)
+	}
+	tier := TierInput{Slug: "free", Name: "Free", Values: map[string]any{"a.b": true}}
+	if _, err := s.CreateTier(ctx, "admin", tier); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateTier(ctx, "admin", tier); !errors.Is(err, ErrDuplicate) {
+		t.Errorf("duplicate tier: err = %v", err)
+	}
+	prod := ProductInput{Slug: "p", Name: "P", Billing: models.BillingOneOff, Entitlements: map[string]any{"a.b": true}}
+	if _, err := s.CreateProduct(ctx, "admin", prod); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateProduct(ctx, "admin", prod); !errors.Is(err, ErrDuplicate) {
+		t.Errorf("duplicate product: err = %v", err)
+	}
+	if list, _ := s.ListKeys(ctx, "", 50, 0); len(list) != 1 {
+		t.Errorf("keys stored = %d, want 1", len(list))
+	}
+}
