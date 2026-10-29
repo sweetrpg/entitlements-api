@@ -49,3 +49,32 @@ func TestRunRejectsBadFiles(t *testing.T) {
 		t.Error("unknown flag accepted")
 	}
 }
+
+func TestRunPricesDryRunAndBadOverlay(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/admin/products" {
+			_, _ = w.Write([]byte(`[]`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":""}`))
+	}))
+	defer srv.Close()
+	e := env(map[string]string{"ENTITLEMENTS_API_URL": srv.URL, "ENTITLEMENTS_ADMIN_TOKEN": "t"})
+
+	var out bytes.Buffer
+	if err := run([]string{"-dry-run", "-prices", "../../seed/prices.dev.json"}, e, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "price encounters (product not created yet)") {
+		t.Errorf("output:\n%s", out.String())
+	}
+
+	bad := filepath.Join(t.TempDir(), "p.json")
+	_ = os.WriteFile(bad, []byte(`{"products":{"a":"nope"}}`), 0o600)
+	if err := run([]string{"-prices", bad}, e, &bytes.Buffer{}); err == nil {
+		t.Error("bad overlay accepted")
+	}
+	if err := run([]string{"-prices", filepath.Join(t.TempDir(), "missing.json")}, e, &bytes.Buffer{}); err == nil {
+		t.Error("missing overlay accepted")
+	}
+}

@@ -29,6 +29,7 @@ func run(args []string, getenv func(string) string, out io.Writer) error {
 	fs := flag.NewFlagSet("seed-catalog", flag.ContinueOnError)
 	file := fs.String("file", "", "seed file (default: the embedded Initiative seed)")
 	dryRun := fs.Bool("dry-run", false, "report what would be created without writing")
+	prices := fs.String("prices", "", "per-environment Stripe price overlay, e.g. seed/prices.dev.json")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -50,14 +51,37 @@ func run(args []string, getenv func(string) string, out io.Writer) error {
 		return err
 	}
 
+	overlay, err := readPrices(*prices)
+	if err != nil {
+		return err
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	report, err := (&seed.Client{BaseURL: url, Token: token}).Load(ctx, doc, *dryRun)
+	client := &seed.Client{BaseURL: url, Token: token}
+	report, err := client.Load(ctx, doc, *dryRun)
+	if err == nil && overlay != nil {
+		err = client.ApplyPrices(ctx, overlay, *dryRun, report)
+	}
 	for _, l := range report.Created {
 		_, _ = fmt.Fprintln(out, "created ", l)
 	}
 	for _, l := range report.Existing {
 		_, _ = fmt.Fprintln(out, "exists  ", l)
 	}
+	for _, l := range report.Skipped {
+		_, _ = fmt.Fprintln(out, "skipped ", l)
+	}
 	return err
+}
+
+func readPrices(path string) (*seed.Prices, error) {
+	if path == "" {
+		return nil, nil
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return seed.ParsePrices(b)
 }
