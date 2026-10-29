@@ -13,6 +13,11 @@ data:
   REDIS_HOST: cache.sweetrpg-entitlements.svc.cluster.local
   REDIS_PORT: "6379"
   OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo-distributor.observability.svc.cluster.local:4318/
+  # Same rate-limit posture as auth-api.
+  RATE_LIMIT_CHEAP: "1200"
+  RATE_LIMIT_CHEAP_WINDOW_SECONDS: "60"
+  RATE_LIMIT_STANDARD: "300"
+  RATE_LIMIT_STANDARD_WINDOW_SECONDS: "60"
   # Landing page until billing pages exist in a frontend.
   STRIPE_CHECKOUT_SUCCESS_URL: https://dev.sweetrpg.com/
   STRIPE_CHECKOUT_CANCEL_URL: https://dev.sweetrpg.com/
