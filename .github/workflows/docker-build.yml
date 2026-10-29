@@ -144,3 +144,12 @@ jobs:
             - name: Inspect image
               run: |
                   docker buildx imagetools inspect ghcr.io/sweetrpg/entitlements-api:${{ needs.meta.outputs.build-version }}
+
+    update-deployment:
+        needs: merge
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: sweetrpg/github-actions/.github/workflows/argocd-update-deployment.yaml@master
+        with:
+            image-name: entitlements-api
+            manifest-path: clusters/dev/entitlements/api.yaml
+        secrets: inherit
