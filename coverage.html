@@ -61,7 +61,7 @@
 				
 				<option value="file2">github.com/sweetrpg/entitlements-api/billing/provider.go (78.3%)</option>
 				
-				<option value="file3">github.com/sweetrpg/entitlements-api/billing/service.go (89.3%)</option>
+				<option value="file3">github.com/sweetrpg/entitlements-api/billing/service.go (88.6%)</option>
 				
 				<option value="file4">github.com/sweetrpg/entitlements-api/billing/webhook.go (85.4%)</option>
 				
@@ -81,7 +81,7 @@
 				
 				<option value="file12">github.com/sweetrpg/entitlements-api/data/memory.go (26.1%)</option>
 				
-				<option value="file13">github.com/sweetrpg/entitlements-api/data/mongo.go (1.6%)</option>
+				<option value="file13">github.com/sweetrpg/entitlements-api/data/mongo.go (1.5%)</option>
 				
 				<option value="file14">github.com/sweetrpg/entitlements-api/docs/docs.go (0.0%)</option>
 				
@@ -488,7 +488,7 @@ type Service struct {
 }
 
 // New returns a Service.
-func New(store data.Store, gw Gateway, limits Limits, urls URLs) *Service <span class="cov10" title="54">{
+func New(store data.Store, gw Gateway, limits Limits, urls URLs) *Service <span class="cov10" title="58">{
         return &amp;Service{store: store, gw: gw, limits: limits, urls: urls}
 }</span>
 
@@ -514,34 +514,34 @@ type CheckoutResult struct {
 // recurring product in a plan group the user already subscribes to switches that subscription
 // to the new price (Stripe prorates) and returns Switched, creating no second subscription.
 // email may be empty.
-func (s *Service) Checkout(ctx context.Context, userID, email string, req CheckoutRequest) (CheckoutResult, error) <span class="cov8" title="32">{
+func (s *Service) Checkout(ctx context.Context, userID, email string, req CheckoutRequest) (CheckoutResult, error) <span class="cov9" title="37">{
         if (req.TierID == "") == (req.ProductID == "") </span><span class="cov2" title="2">{
                 return CheckoutResult{}, fmt.Errorf("%w: provide either tier_id or product_id", models.ErrInvalid)
         }</span>
-        <span class="cov8" title="30">params := CheckoutParams{UserID: userID, Email: email, SuccessURL: s.urls.CheckoutSuccess, CancelURL: s.urls.CheckoutCancel}
+        <span class="cov8" title="35">params := CheckoutParams{UserID: userID, Email: email, SuccessURL: s.urls.CheckoutSuccess, CancelURL: s.urls.CheckoutCancel}
         var (
                 err error
                 sw  *planSwitch
         )
         if req.TierID != "" </span><span class="cov4" title="4">{
                 err = s.tierParams(ctx, req.TierID, &amp;params)
-        }</span> else<span class="cov8" title="26"> {
+        }</span> else<span class="cov8" title="31"> {
                 sw, err = s.productParams(ctx, userID, req, &amp;params)
         }</span>
-        <span class="cov8" title="30">if err != nil </span><span class="cov6" title="14">{
+        <span class="cov8" title="35">if err != nil </span><span class="cov6" title="14">{
                 return CheckoutResult{}, err
         }</span>
-        <span class="cov7" title="16">if sw != nil </span><span class="cov4" title="4">{
+        <span class="cov7" title="21">if sw != nil </span><span class="cov4" title="5">{
                 return s.switchPlan(ctx, userID, sw, params)
         }</span>
-        <span class="cov6" title="12">if params.CustomerID, err = s.store.StripeCustomer(ctx, userID); err != nil </span><span class="cov0" title="0">{
+        <span class="cov7" title="16">if params.CustomerID, err = s.store.StripeCustomer(ctx, userID); err != nil </span><span class="cov0" title="0">{
                 return CheckoutResult{}, err
         }</span>
-        <span class="cov6" title="12">url, err := s.gw.CreateCheckout(ctx, params)
+        <span class="cov7" title="16">url, err := s.gw.CreateCheckout(ctx, params)
         if err != nil </span><span class="cov2" title="2">{
                 return CheckoutResult{}, providerFailed("checkout", err, "product", req.ProductID, "tier", req.TierID, "price_id", params.PriceID)
         }</span>
-        <span class="cov6" title="10">return CheckoutResult{URL: url}, nil</span>
+        <span class="cov6" title="14">return CheckoutResult{URL: url}, nil</span>
 }
 
 // planSwitch is the subscription a checkout would move to another product in its plan group.
@@ -552,16 +552,16 @@ type planSwitch struct {
 
 // switchPlan changes the Stripe subscription, then applies the new product's entitlements to its
 // grants right away; the customer.subscription.updated event that follows finds nothing to change.
-func (s *Service) switchPlan(ctx context.Context, userID string, sw *planSwitch, p CheckoutParams) (CheckoutResult, error) <span class="cov4" title="4">{
+func (s *Service) switchPlan(ctx context.Context, userID string, sw *planSwitch, p CheckoutParams) (CheckoutResult, error) <span class="cov4" title="5">{
         err := s.gw.SwitchPlan(ctx, SwitchParams{SubscriptionID: sw.subscriptionID, PriceID: p.PriceID, ProductID: sw.product.Slug, UserID: userID})
         if err != nil </span><span class="cov1" title="1">{
                 return CheckoutResult{}, providerFailed("plan switch", err, "product", sw.product.Slug, "subscription", sw.subscriptionID, "price_id", p.PriceID)
         }</span>
-        <span class="cov3" title="3">grants, err := s.store.GrantsByExternal(ctx, models.SourceStripeSubscription, sw.subscriptionID)
+        <span class="cov4" title="4">grants, err := s.store.GrantsByExternal(ctx, models.SourceStripeSubscription, sw.subscriptionID)
         if err != nil </span><span class="cov0" title="0">{
                 return CheckoutResult{}, err
         }</span>
-        <span class="cov3" title="3">return CheckoutResult{Switched: true}, s.replaceEntitlements(ctx, grants, sw.product, quantityOf(grants))</span>
+        <span class="cov4" title="4">return CheckoutResult{Switched: true}, s.replaceEntitlements(ctx, grants, sw.product, quantityOf(grants))</span>
 }
 
 func (s *Service) tierParams(ctx context.Context, tierID string, p *CheckoutParams) error <span class="cov4" title="4">{
@@ -576,105 +576,108 @@ func (s *Service) tierParams(ctx context.Context, tierID string, p *CheckoutPara
         return nil</span>
 }
 
-func (s *Service) productParams(ctx context.Context, userID string, req CheckoutRequest, p *CheckoutParams) (*planSwitch, error) <span class="cov8" title="26">{
+func (s *Service) productParams(ctx context.Context, userID string, req CheckoutRequest, p *CheckoutParams) (*planSwitch, error) <span class="cov8" title="31">{
         qty := req.Quantity
-        if qty == 0 </span><span class="cov7" title="19">{
+        if qty == 0 </span><span class="cov8" title="24">{
                 qty = 1
         }</span>
-        <span class="cov8" title="26">if qty &lt; 1 || qty &gt; constants.MaxPurchaseQuantity </span><span class="cov2" title="2">{
+        <span class="cov8" title="31">if qty &lt; 1 || qty &gt; constants.MaxPurchaseQuantity </span><span class="cov2" title="2">{
                 return nil, fmt.Errorf("%w: quantity must be between 1 and %d", models.ErrInvalid, constants.MaxPurchaseQuantity)
         }</span>
-        <span class="cov8" title="24">products, err := s.store.GetProducts(ctx, []string{req.ProductID})
+        <span class="cov8" title="29">products, err := s.store.GetProducts(ctx, []string{req.ProductID})
         if err != nil </span><span class="cov0" title="0">{
                 return nil, err
         }</span>
-        <span class="cov8" title="24">if len(products) == 0 || products[0].StripePriceID == "" </span><span class="cov2" title="2">{
+        <span class="cov8" title="29">if len(products) == 0 || products[0].StripePriceID == "" </span><span class="cov2" title="2">{
                 return nil, fmt.Errorf("%w: product is not available for purchase", models.ErrInvalid)
         }</span>
-        <span class="cov7" title="22">prod := products[0]
-        if !prod.Repeatable </span><span class="cov7" title="16">{
+        <span class="cov8" title="27">prod := products[0]
+        if !prod.Repeatable </span><span class="cov7" title="20">{
                 if qty != 1 </span><span class="cov1" title="1">{
                         return nil, fmt.Errorf("%w: this product cannot be bought with a quantity", models.ErrInvalid)
                 }</span>
-                <span class="cov7" title="15">if err := s.checkNotHeld(ctx, userID, prod.Slug); err != nil </span><span class="cov2" title="2">{
+                <span class="cov7" title="19">if err := s.checkNotHeld(ctx, userID, prod.Slug); err != nil </span><span class="cov2" title="2">{
                         return nil, err
                 }</span>
         }
-        <span class="cov7" title="19">sw, err := s.findPlanMember(ctx, userID, prod)
+        <span class="cov8" title="24">sw, err := s.findPlanMember(ctx, userID, prod)
         if err != nil </span><span class="cov0" title="0">{
                 return nil, err
         }</span>
-        <span class="cov7" title="19">var opts []catalog.PurchaseOption
-        if sw != nil </span><span class="cov4" title="5">{
+        <span class="cov8" title="24">var opts []catalog.PurchaseOption
+        if sw != nil </span><span class="cov4" title="6">{
                 opts = append(opts, catalog.Replacing(sw.subscriptionID))
         }</span>
-        <span class="cov7" title="19">adds := make([]catalog.Units, 0, len(prod.Entitlements))
-        for _, e := range prod.Entitlements </span><span class="cov8" title="23">{
-                if e.Type == models.TypeLimit &amp;&amp; !e.IsAtLeast() </span><span class="cov5" title="8">{
+        <span class="cov8" title="24">adds := make([]catalog.Units, 0, len(prod.Entitlements))
+        for _, e := range prod.Entitlements </span><span class="cov8" title="28">{
+                if e.Type == models.TypeLimit &amp;&amp; !e.IsAtLeast() </span><span class="cov5" title="9">{
                         adds = append(adds, catalog.Units{Key: e.Key, Units: e.Value * qty})
                 }</span>
         }
-        <span class="cov7" title="19">if err := s.limits.CheckPurchase(ctx, userID, adds, opts...); err != nil </span><span class="cov2" title="2">{
+        <span class="cov8" title="24">if err := s.limits.CheckPurchase(ctx, userID, adds, opts...); err != nil </span><span class="cov2" title="2">{
                 return nil, err
         }</span>
-        <span class="cov7" title="17">if err := s.limits.CheckRaise(ctx, userID, prod.Entitlements, opts...); err != nil </span><span class="cov3" title="3">{
+        <span class="cov7" title="22">if err := s.limits.CheckRaise(ctx, userID, prod.Entitlements, opts...); err != nil </span><span class="cov3" title="3">{
                 return nil, err
         }</span>
-        <span class="cov6" title="14">p.PriceID, p.ProductID, p.Quantity = prod.StripePriceID, prod.Slug, qty
-        if sw != nil </span><span class="cov4" title="4">{
+        <span class="cov7" title="19">p.PriceID, p.ProductID, p.Quantity = prod.StripePriceID, prod.Slug, qty
+        if sw != nil </span><span class="cov4" title="5">{
                 sw.product = prod
         }</span>
-        <span class="cov6" title="14">return sw, nil</span>
+        <span class="cov7" title="19">return sw, nil</span>
 }
 
 // findPlanMember returns the user's active subscription to another product in prod's plan group,
 // if any. Holding the same product again is refused. Products outside a group never switch.
-func (s *Service) findPlanMember(ctx context.Context, userID string, prod models.Product) (*planSwitch, error) <span class="cov7" title="19">{
-        if prod.PlanGroup == "" </span><span class="cov6" title="13">{
+func (s *Service) findPlanMember(ctx context.Context, userID string, prod models.Product) (*planSwitch, error) <span class="cov8" title="24">{
+        if prod.PlanGroup == "" </span><span class="cov6" title="14">{
                 return nil, nil
         }</span>
-        <span class="cov5" title="6">grants, err := s.store.ActiveGrants(ctx, userID, time.Now())
+        <span class="cov6" title="10">grants, err := s.store.ActiveGrants(ctx, userID, time.Now())
         if err != nil </span><span class="cov0" title="0">{
                 return nil, err
         }</span>
-        <span class="cov5" title="6">var ids []string
-        for _, g := range grants </span><span class="cov4" title="5">{
-                if g.Source == models.SourceStripeSubscription &amp;&amp; g.ProductID != "" &amp;&amp; !slices.Contains(ids, g.ProductID) </span><span class="cov4" title="5">{
+        <span class="cov6" title="10">var ids []string
+        for _, g := range grants </span><span class="cov4" title="6">{
+                if g.Source == models.SourceStripeSubscription &amp;&amp; g.ProductID != "" &amp;&amp; !slices.Contains(ids, g.ProductID) </span><span class="cov4" title="6">{
                         ids = append(ids, g.ProductID)
                 }</span>
         }
-        <span class="cov5" title="6">held, err := s.store.GetProducts(ctx, ids)
+        <span class="cov6" title="10">if len(ids) == 0 </span><span class="cov4" title="4">{
+                return nil, nil // no subscription to compare against
+        }</span>
+        <span class="cov4" title="6">held, err := s.store.GetProducts(ctx, ids)
         if err != nil </span><span class="cov0" title="0">{
                 return nil, err
         }</span>
-        <span class="cov5" title="6">for _, h := range held </span><span class="cov4" title="5">{
+        <span class="cov4" title="6">for _, h := range held </span><span class="cov4" title="6">{
                 if h.PlanGroup != prod.PlanGroup </span><span class="cov0" title="0">{
                         continue</span>
                 }
-                <span class="cov4" title="5">if h.Slug == prod.Slug </span><span class="cov0" title="0">{
+                <span class="cov4" title="6">if h.Slug == prod.Slug </span><span class="cov0" title="0">{
                         return nil, fmt.Errorf("%w: already subscribed to this product", catalog.ErrInUse)
                 }</span>
-                <span class="cov4" title="5">for _, g := range grants </span><span class="cov4" title="5">{
-                        if g.Source == models.SourceStripeSubscription &amp;&amp; g.ProductID == h.Slug </span><span class="cov4" title="5">{
+                <span class="cov4" title="6">for _, g := range grants </span><span class="cov4" title="6">{
+                        if g.Source == models.SourceStripeSubscription &amp;&amp; g.ProductID == h.Slug </span><span class="cov4" title="6">{
                                 return &amp;planSwitch{subscriptionID: g.ExternalID}, nil
                         }</span>
                 }
         }
-        <span class="cov1" title="1">return nil, nil</span>
+        <span class="cov0" title="0">return nil, nil</span>
 }
 
 // checkNotHeld refuses a second purchase of a non-repeatable product.
-func (s *Service) checkNotHeld(ctx context.Context, userID, productID string) error <span class="cov7" title="15">{
+func (s *Service) checkNotHeld(ctx context.Context, userID, productID string) error <span class="cov7" title="19">{
         grants, err := s.store.ActiveGrants(ctx, userID, time.Now())
         if err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov7" title="15">for _, g := range grants </span><span class="cov5" title="9">{
+        <span class="cov7" title="19">for _, g := range grants </span><span class="cov6" title="10">{
                 if g.ProductID == productID </span><span class="cov2" title="2">{
                         return fmt.Errorf("%w: product already purchased", catalog.ErrInUse)
                 }</span>
         }
-        <span class="cov6" title="13">return nil</span>
+        <span class="cov7" title="17">return nil</span>
 }
 
 // Portal returns a billing-portal URL for the user's Stripe customer, or data.ErrNotFound when
@@ -727,24 +730,24 @@ type Event struct {
 // over: an event ID already recorded is skipped, and every handler converges on the same grant
 // state when replayed (the ID is recorded only after the handler succeeds, so a failed event is
 // retried). Event types the service does not act on are ignored without being recorded.
-func (s *Service) HandleEvent(ctx context.Context, ev Event) error <span class="cov9" title="75">{
+func (s *Service) HandleEvent(ctx context.Context, ev Event) error <span class="cov9" title="76">{
         handle, ok := s.handlers()[ev.Type]
         if !ok </span><span class="cov1" title="1">{
                 return nil
         }</span>
-        <span class="cov9" title="74">done, err := s.store.EventProcessed(ctx, ev.ID)
+        <span class="cov9" title="75">done, err := s.store.EventProcessed(ctx, ev.ID)
         if err != nil || done </span><span class="cov2" title="2">{
                 return err
         }</span>
-        <span class="cov9" title="72">if err := handle(ctx, ev.Object); err != nil </span><span class="cov1" title="1">{
+        <span class="cov9" title="73">if err := handle(ctx, ev.Object); err != nil </span><span class="cov1" title="1">{
                 return err
         }</span>
-        <span class="cov9" title="71">return s.store.RecordEvent(ctx, ev.ID, ev.Type, time.Now().UTC())</span>
+        <span class="cov9" title="72">return s.store.RecordEvent(ctx, ev.ID, ev.Type, time.Now().UTC())</span>
 }
 
 type handlerFunc func(ctx context.Context, object json.RawMessage) error
 
-func (s *Service) handlers() map[string]handlerFunc <span class="cov9" title="75">{
+func (s *Service) handlers() map[string]handlerFunc <span class="cov9" title="76">{
         return map[string]handlerFunc{
                 "checkout.session.completed":               s.onCheckout,
                 "checkout.session.async_payment_succeeded": s.onCheckout,
@@ -769,44 +772,44 @@ type purchase struct {
         refs       []string
 }
 
-func (s *Service) onCheckout(ctx context.Context, raw json.RawMessage) error <span class="cov8" title="40">{
+func (s *Service) onCheckout(ctx context.Context, raw json.RawMessage) error <span class="cov8" title="41">{
         var cs checkoutSession
         if err := json.Unmarshal(raw, &amp;cs); err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov8" title="40">if cs.PaymentStatus != "paid" &amp;&amp; cs.PaymentStatus != "no_payment_required" </span><span class="cov1" title="1">{
+        <span class="cov8" title="41">if cs.PaymentStatus != "paid" &amp;&amp; cs.PaymentStatus != "no_payment_required" </span><span class="cov1" title="1">{
                 return nil // async payment pending; async_payment_succeeded follows
         }</span>
-        <span class="cov8" title="39">user := cs.Metadata["user_id"]
+        <span class="cov8" title="40">user := cs.Metadata["user_id"]
         if user == "" </span><span class="cov1" title="1">{
                 user = cs.ClientReferenceID
         }</span>
-        <span class="cov8" title="39">if user == "" </span><span class="cov1" title="1">{
+        <span class="cov8" title="40">if user == "" </span><span class="cov1" title="1">{
                 logging.Logger.Warn("stripe checkout session has no user, ignoring", "session", cs.ID)
                 return nil
         }</span>
-        <span class="cov8" title="38">if cs.Customer != "" </span><span class="cov8" title="37">{
+        <span class="cov8" title="39">if cs.Customer != "" </span><span class="cov8" title="38">{
                 if err := s.store.SaveStripeCustomer(ctx, user, cs.Customer, systemActor); err != nil </span><span class="cov0" title="0">{
                         return err
                 }</span>
         }
-        <span class="cov8" title="38">qty, _ := strconv.ParseInt(cs.Metadata["quantity"], 10, 64)
+        <span class="cov8" title="39">qty, _ := strconv.ParseInt(cs.Metadata["quantity"], 10, 64)
         p := purchase{
                 userID: user, tierID: cs.Metadata["tier_id"], productID: cs.Metadata["product_id"],
                 quantity: max(qty, 1), refs: nonEmpty(cs.ID),
         }
         switch cs.Mode </span>{
-        case "subscription":<span class="cov7" title="26">
+        case "subscription":<span class="cov7" title="27">
                 p.source, p.externalID = models.SourceStripeSubscription, cs.Subscription</span>
         case "payment":<span class="cov5" title="12">
                 p.source, p.externalID = models.SourceStripePurchase, cs.PaymentIntent</span>
         default:<span class="cov0" title="0">
                 return nil</span>
         }
-        <span class="cov8" title="38">if p.externalID == "" </span><span class="cov0" title="0">{
+        <span class="cov8" title="39">if p.externalID == "" </span><span class="cov0" title="0">{
                 return nil
         }</span>
-        <span class="cov8" title="38">return s.applyPurchase(ctx, p)</span>
+        <span class="cov8" title="39">return s.applyPurchase(ctx, p)</span>
 }
 
 func (s *Service) onInvoicePaid(ctx context.Context, raw json.RawMessage) error <span class="cov6" title="13">{
@@ -875,28 +878,28 @@ func (s *Service) onDispute(ctx context.Context, raw json.RawMessage) error <spa
 // wanted expands a purchase into the grants it should have: one key-level grant per entitlement
 // of a product (value x quantity; a flag is simply on), or a single tier grant. A product that
 // no longer exists yields none.
-func (s *Service) wanted(ctx context.Context, p purchase) ([]models.Grant, error) <span class="cov8" title="50">{
+func (s *Service) wanted(ctx context.Context, p purchase) ([]models.Grant, error) <span class="cov8" title="51">{
         base := models.Grant{
                 UserID: p.userID, Source: p.source, ExternalID: p.externalID,
                 ValidUntil: p.validUntil, Refs: p.refs, Status: models.GrantActive,
         }
         switch </span>{
-        case p.productID != "":<span class="cov7" title="24">
+        case p.productID != "":<span class="cov7" title="25">
                 products, err := s.store.GetProducts(ctx, []string{p.productID})
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
                 }</span>
-                <span class="cov7" title="24">if len(products) == 0 </span><span class="cov1" title="1">{
+                <span class="cov7" title="25">if len(products) == 0 </span><span class="cov1" title="1">{
                         logging.Logger.Warn("stripe event names a product that is not in the catalog", "product", p.productID, "external_id", p.externalID)
                         return nil, nil
                 }</span>
-                <span class="cov7" title="23">out := make([]models.Grant, 0, len(products[0].Entitlements))
-                for _, e := range products[0].Entitlements </span><span class="cov7" title="29">{
+                <span class="cov7" title="24">out := make([]models.Grant, 0, len(products[0].Entitlements))
+                for _, e := range products[0].Entitlements </span><span class="cov7" title="30">{
                         g := base
                         g.Key, g.Value, g.ProductID, g.Quantity, g.Mode = e.Key, grantValue(e, p.quantity), p.productID, p.quantity, e.Mode
                         out = append(out, g)
                 }</span>
-                <span class="cov7" title="23">return out, nil</span>
+                <span class="cov7" title="24">return out, nil</span>
         case p.tierID != "":<span class="cov7" title="26">
                 g := base
                 g.TierID = p.tierID
@@ -907,11 +910,11 @@ func (s *Service) wanted(ctx context.Context, p purchase) ([]models.Grant, error
 
 // grantValue is what one purchase grants: a flag is on, an at_least floor is the same whatever the
 // quantity, and an add entitlement is its value per unit x quantity.
-func grantValue(e models.ProductEntitlement, quantity int64) int64 <span class="cov8" title="37">{
+func grantValue(e models.ProductEntitlement, quantity int64) int64 <span class="cov8" title="39">{
         if e.Type == models.TypeFlag </span><span class="cov5" title="10">{
                 return 1
         }</span>
-        <span class="cov7" title="27">if e.IsAtLeast() </span><span class="cov6" title="15">{
+        <span class="cov7" title="29">if e.IsAtLeast() </span><span class="cov6" title="17">{
                 return e.Value
         }</span>
         <span class="cov5" title="12">return e.Value * quantity</span>
@@ -922,33 +925,33 @@ func grantValue(e models.ProductEntitlement, quantity int64) int64 <span class="
 // revoked grant is never touched. Existing grants are updated even when the event carries no
 // product or tier (a renewal invoice), and an event that would create grants without knowing
 // the user is ignored.
-func (s *Service) applyPurchase(ctx context.Context, p purchase) error <span class="cov8" title="50">{
+func (s *Service) applyPurchase(ctx context.Context, p purchase) error <span class="cov8" title="51">{
         existing, err := s.store.GrantsByExternal(ctx, p.source, p.externalID)
         if err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov8" title="50">want, err := s.wanted(ctx, p)
+        <span class="cov8" title="51">want, err := s.wanted(ctx, p)
         if err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov8" title="50">for i := range existing </span><span class="cov5" title="9">{
+        <span class="cov8" title="51">for i := range existing </span><span class="cov5" title="9">{
                 if err := s.mergeGrant(ctx, &amp;existing[i], p); err != nil </span><span class="cov0" title="0">{
                         return err
                 }</span>
         }
-        <span class="cov8" title="50">for _, g := range want </span><span class="cov9" title="55">{
+        <span class="cov8" title="51">for _, g := range want </span><span class="cov9" title="56">{
                 if slices.ContainsFunc(existing, func(e models.Grant) bool </span><span class="cov5" title="9">{ return e.Key == g.Key &amp;&amp; e.TierID == g.TierID }</span>) <span class="cov5" title="9">{
                         continue</span>
                 }
-                <span class="cov8" title="46">if g.UserID == "" </span><span class="cov0" title="0">{
+                <span class="cov8" title="47">if g.UserID == "" </span><span class="cov0" title="0">{
                         logging.Logger.Warn("stripe event cannot create a grant without a user", "external_id", p.externalID)
                         return nil
                 }</span>
-                <span class="cov8" title="46">if err := s.store.InsertGrant(ctx, &amp;g, systemActor); err != nil </span><span class="cov1" title="1">{
+                <span class="cov8" title="47">if err := s.store.InsertGrant(ctx, &amp;g, systemActor); err != nil </span><span class="cov1" title="1">{
                         return err
                 }</span>
         }
-        <span class="cov8" title="49">return nil</span>
+        <span class="cov8" title="50">return nil</span>
 }
 
 func (s *Service) mergeGrant(ctx context.Context, cur *models.Grant, p purchase) error <span class="cov5" title="9">{
@@ -1014,16 +1017,16 @@ func (s *Service) productFor(ctx context.Context, sub subscription) (*models.Pro
 // of the product's keys (updated in place, or created), and any grant for a key it no longer
 // has ended. It keeps one set of grants per Stripe object, sharing its ID and validity. A revoked
 // purchase is left alone.
-func (s *Service) replaceEntitlements(ctx context.Context, grants []models.Grant, prod models.Product, qty int64) error <span class="cov5" title="10">{
-        if len(grants) == 0 || slices.ContainsFunc(grants, func(g models.Grant) bool </span><span class="cov5" title="10">{ return g.Status == models.GrantRevoked }</span>) <span class="cov2" title="2">{
+func (s *Service) replaceEntitlements(ctx context.Context, grants []models.Grant, prod models.Product, qty int64) error <span class="cov5" title="11">{
+        if len(grants) == 0 || slices.ContainsFunc(grants, func(g models.Grant) bool </span><span class="cov5" title="11">{ return g.Status == models.GrantRevoked }</span>) <span class="cov2" title="2">{
                 return nil
         }</span>
-        <span class="cov5" title="8">keep := map[string]bool{}
-        for _, e := range prod.Entitlements </span><span class="cov5" title="8">{
+        <span class="cov5" title="9">keep := map[string]bool{}
+        for _, e := range prod.Entitlements </span><span class="cov5" title="9">{
                 keep[e.Key] = true
                 want := grantValue(e, qty)
-                i := slices.IndexFunc(grants, func(g models.Grant) bool </span><span class="cov5" title="8">{ return g.Key == e.Key }</span>)
-                <span class="cov5" title="8">if i &lt; 0 </span><span class="cov2" title="2">{
+                i := slices.IndexFunc(grants, func(g models.Grant) bool </span><span class="cov5" title="9">{ return g.Key == e.Key }</span>)
+                <span class="cov5" title="9">if i &lt; 0 </span><span class="cov2" title="2">{
                         g := grants[0]
                         g.ID, g.Auditable, g.TierID, g.Status = primitive.NilObjectID, mcore.Auditable{}, "", models.GrantActive
                         g.Key, g.Value, g.ProductID, g.Quantity, g.Mode = e.Key, want, prod.Slug, qty, e.Mode
@@ -1032,18 +1035,18 @@ func (s *Service) replaceEntitlements(ctx context.Context, grants []models.Grant
                         }</span>
                         <span class="cov2" title="2">continue</span>
                 }
-                <span class="cov4" title="6">g := &amp;grants[i]
+                <span class="cov4" title="7">g := &amp;grants[i]
                 if g.Value == want &amp;&amp; g.Quantity == qty &amp;&amp; g.ProductID == prod.Slug &amp;&amp; g.Mode == e.Mode &amp;&amp; g.Status == models.GrantActive </span><span class="cov1" title="1">{
                         continue</span>
                 }
-                <span class="cov4" title="5">g.Value, g.Quantity, g.ProductID, g.Mode, g.Status = want, qty, prod.Slug, e.Mode, models.GrantActive
+                <span class="cov4" title="6">g.Value, g.Quantity, g.ProductID, g.Mode, g.Status = want, qty, prod.Slug, e.Mode, models.GrantActive
                 if err := s.store.UpdateGrant(ctx, g, systemActor); err != nil </span><span class="cov0" title="0">{
                         return err
                 }</span>
-                <span class="cov4" title="5">s.warnIfOverMaximum(ctx, g)</span>
+                <span class="cov4" title="6">s.warnIfOverMaximum(ctx, g)</span>
         }
-        <span class="cov5" title="8">for i := range grants </span><span class="cov5" title="8">{
-                if keep[grants[i].Key] || grants[i].Status != models.GrantActive </span><span class="cov4" title="6">{
+        <span class="cov5" title="9">for i := range grants </span><span class="cov5" title="9">{
+                if keep[grants[i].Key] || grants[i].Status != models.GrantActive </span><span class="cov4" title="7">{
                         continue</span>
                 }
                 <span class="cov2" title="2">grants[i].Status = models.GrantEnded
@@ -1051,13 +1054,13 @@ func (s *Service) replaceEntitlements(ctx context.Context, grants []models.Grant
                         return err
                 }</span>
         }
-        <span class="cov5" title="8">return nil</span>
+        <span class="cov5" title="9">return nil</span>
 }
 
 // quantityOf is the quantity a purchase was made at, 1 if unrecorded.
-func quantityOf(grants []models.Grant) int64 <span class="cov3" title="3">{
-        for _, g := range grants </span><span class="cov3" title="3">{
-                if g.Quantity &gt; 0 </span><span class="cov3" title="3">{
+func quantityOf(grants []models.Grant) int64 <span class="cov3" title="4">{
+        for _, g := range grants </span><span class="cov3" title="4">{
+                if g.Quantity &gt; 0 </span><span class="cov3" title="4">{
                         return g.Quantity
                 }</span>
         }
@@ -1065,7 +1068,7 @@ func quantityOf(grants []models.Grant) int64 <span class="cov3" title="3">{
 }
 
 // warnIfOverMaximum probes whether the user now holds more than the key's maximum.
-func (s *Service) warnIfOverMaximum(ctx context.Context, g *models.Grant) <span class="cov4" title="5">{
+func (s *Service) warnIfOverMaximum(ctx context.Context, g *models.Grant) <span class="cov4" title="6">{
         var exceeded catalog.MaxExceededError
         if err := s.limits.CheckPurchase(ctx, g.UserID, []catalog.Units{{Key: g.Key}}); errors.As(err, &amp;exceeded) </span><span class="cov1" title="1">{
                 logging.Logger.Warn("subscription quantity change passes the key maximum; checks clamp it",
@@ -1111,8 +1114,8 @@ func (s *Service) revoke(ctx context.Context, refs ...string) error <span class=
         <span class="cov4" title="5">return nil</span>
 }
 
-func nonEmpty(vals ...string) []string <span class="cov9" title="55">{
-        return slices.DeleteFunc(slices.Clone(vals), func(v string) bool </span><span class="cov10" title="88">{ return v == "" }</span>)
+func nonEmpty(vals ...string) []string <span class="cov9" title="56">{
+        return slices.DeleteFunc(slices.Clone(vals), func(v string) bool </span><span class="cov10" title="89">{ return v == "" }</span>)
 }
 </pre>
 		
@@ -2761,9 +2764,12 @@ func (s *MongoStore) InsertKey(ctx context.Context, k *models.Key, actor string)
 }</span>
 
 func (s *MongoStore) GetKeys(ctx context.Context, names []string) ([]models.Key, error) <span class="cov0" title="0">{
-        f := bson.D{notDeleted, {Key: "key", Value: bson.D{{Key: "$in", Value: names}}}}
-        return find[models.Key](ctx, s.db.Collection(constants.KeysCollection), f, nil)
-}</span>
+        if len(names) == 0 </span><span class="cov0" title="0">{
+                return nil, nil // {$in: null} is a MongoDB error, and nothing can match anyway
+        }</span>
+        <span class="cov0" title="0">f := bson.D{notDeleted, {Key: "key", Value: bson.D{{Key: "$in", Value: names}}}}
+        return find[models.Key](ctx, s.db.Collection(constants.KeysCollection), f, nil)</span>
+}
 
 func (s *MongoStore) ListKeys(ctx context.Context, prefix string, limit, skip int64) ([]models.Key, error) <span class="cov0" title="0">{
         f := bson.D{notDeleted, {Key: "key", Value: bson.D{{Key: "$regex", Value: "^" + regexp.QuoteMeta(prefix)}}}}
@@ -2813,9 +2819,12 @@ func (s *MongoStore) InsertTier(ctx context.Context, t *models.Tier, actor strin
 }</span>
 
 func (s *MongoStore) GetTiers(ctx context.Context, slugs []string) ([]models.Tier, error) <span class="cov0" title="0">{
-        f := bson.D{notDeleted, {Key: "slug", Value: bson.D{{Key: "$in", Value: slugs}}}}
-        return find[models.Tier](ctx, s.db.Collection(constants.TiersCollection), f, nil)
-}</span>
+        if len(slugs) == 0 </span><span class="cov0" title="0">{
+                return nil, nil
+        }</span>
+        <span class="cov0" title="0">f := bson.D{notDeleted, {Key: "slug", Value: bson.D{{Key: "$in", Value: slugs}}}}
+        return find[models.Tier](ctx, s.db.Collection(constants.TiersCollection), f, nil)</span>
+}
 
 func (s *MongoStore) ListTiers(ctx context.Context, limit, skip int64) ([]models.Tier, error) <span class="cov0" title="0">{
         return find[models.Tier](ctx, s.db.Collection(constants.TiersCollection), bson.D{notDeleted}, page("slug", 1, limit, skip))
@@ -2845,9 +2854,12 @@ func (s *MongoStore) InsertProduct(ctx context.Context, p *models.Product, actor
 }</span>
 
 func (s *MongoStore) GetProducts(ctx context.Context, slugs []string) ([]models.Product, error) <span class="cov0" title="0">{
-        f := bson.D{notDeleted, {Key: "slug", Value: bson.D{{Key: "$in", Value: slugs}}}}
-        return find[models.Product](ctx, s.db.Collection(constants.ProductsCollection), f, nil)
-}</span>
+        if len(slugs) == 0 </span><span class="cov0" title="0">{
+                return nil, nil
+        }</span>
+        <span class="cov0" title="0">f := bson.D{notDeleted, {Key: "slug", Value: bson.D{{Key: "$in", Value: slugs}}}}
+        return find[models.Product](ctx, s.db.Collection(constants.ProductsCollection), f, nil)</span>
+}
 
 func (s *MongoStore) ListProducts(ctx context.Context, limit, skip int64) ([]models.Product, error) <span class="cov0" title="0">{
         return find[models.Product](ctx, s.db.Collection(constants.ProductsCollection), bson.D{notDeleted}, page("slug", 1, limit, skip))
