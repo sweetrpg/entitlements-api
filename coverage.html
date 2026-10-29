@@ -2108,27 +2108,27 @@ func run(args []string, getenv func(string) string, out io.Writer) error <span c
         }</span>
 
         <span class="cov4" title="4">overlay, err := readPrices(*prices)
-        if err != nil </span><span class="cov2" title="2">{
+        if err != nil </span><span class="cov1" title="1">{
                 return err
         }</span>
 
-        <span class="cov2" title="2">ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+        <span class="cov3" title="3">ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
         defer cancel()
         client := &amp;seed.Client{BaseURL: url, Token: token}
         report, err := client.Load(ctx, doc, *dryRun)
         if err == nil &amp;&amp; overlay != nil </span><span class="cov1" title="1">{
                 err = client.ApplyPrices(ctx, overlay, *dryRun, report)
         }</span>
-        <span class="cov2" title="2">for _, l := range report.Created </span><span class="cov10" title="50">{
+        <span class="cov3" title="3">for _, l := range report.Created </span><span class="cov10" title="51">{
                 _, _ = fmt.Fprintln(out, "created ", l)
         }</span>
-        <span class="cov2" title="2">for _, l := range report.Existing </span><span class="cov0" title="0">{
+        <span class="cov3" title="3">for _, l := range report.Existing </span><span class="cov0" title="0">{
                 _, _ = fmt.Fprintln(out, "exists  ", l)
         }</span>
-        <span class="cov2" title="2">for _, l := range report.Skipped </span><span class="cov0" title="0">{
+        <span class="cov3" title="3">for _, l := range report.Skipped </span><span class="cov0" title="0">{
                 _, _ = fmt.Fprintln(out, "skipped ", l)
         }</span>
-        <span class="cov2" title="2">return err</span>
+        <span class="cov3" title="3">return err</span>
 }
 
 func readPrices(path string) (*seed.Prices, error) <span class="cov4" title="4">{
@@ -3643,33 +3643,33 @@ func (c *Client) setDefaultTier(ctx context.Context, r *Report, id string, dryRu
         return nil</span>
 }
 
-func (c *Client) do(ctx context.Context, method, path string, body any) (int, []byte, error) <span class="cov10" title="16">{
+func (c *Client) do(ctx context.Context, method, path string, body any) (int, []byte, error) <span class="cov10" title="18">{
         var rd io.Reader
-        if body != nil </span><span class="cov8" title="10">{
+        if body != nil </span><span class="cov8" title="11">{
                 b, err := json.Marshal(body)
                 if err != nil </span><span class="cov0" title="0">{
                         return 0, nil, err
                 }</span>
-                <span class="cov8" title="10">rd = bytes.NewReader(b)</span>
+                <span class="cov8" title="11">rd = bytes.NewReader(b)</span>
         }
-        <span class="cov10" title="16">req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(c.BaseURL, "/")+path, rd)
+        <span class="cov10" title="18">req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(c.BaseURL, "/")+path, rd)
         if err != nil </span><span class="cov0" title="0">{
                 return 0, nil, err
         }</span>
-        <span class="cov10" title="16">req.Header.Set("Authorization", "Bearer "+c.Token)
-        if body != nil </span><span class="cov8" title="10">{
+        <span class="cov10" title="18">req.Header.Set("Authorization", "Bearer "+c.Token)
+        if body != nil </span><span class="cov8" title="11">{
                 req.Header.Set("Content-Type", "application/json")
         }</span>
-        <span class="cov10" title="16">h := c.HTTP
-        if h == nil </span><span class="cov10" title="16">{
+        <span class="cov10" title="18">h := c.HTTP
+        if h == nil </span><span class="cov10" title="18">{
                 h = &amp;http.Client{Timeout: 15 * time.Second}
         }</span>
-        <span class="cov10" title="16">resp, err := h.Do(req)
+        <span class="cov10" title="18">resp, err := h.Do(req)
         if err != nil </span><span class="cov1" title="1">{
                 return 0, nil, err
         }</span>
-        <span class="cov9" title="15">defer func() </span><span class="cov9" title="15">{ _ = resp.Body.Close() }</span>()
-        <span class="cov9" title="15">out, err := io.ReadAll(io.LimitReader(resp.Body, 1&lt;&lt;20))
+        <span class="cov9" title="17">defer func() </span><span class="cov9" title="17">{ _ = resp.Body.Close() }</span>()
+        <span class="cov9" title="17">out, err := io.ReadAll(io.LimitReader(resp.Body, 1&lt;&lt;20))
         return resp.StatusCode, out, err</span>
 }
 
@@ -3679,20 +3679,21 @@ type Prices struct {
         Products map[string]string `json:"products"`
 }
 
-// ParsePrices decodes an overlay, rejecting unknown fields and anything that is not a price ID.
-func ParsePrices(b []byte) (*Prices, error) <span class="cov5" title="4">{
+// ParsePrices decodes an overlay, rejecting unknown fields and empty prices. A price ID is an
+// opaque string: Stripe generates price_... values, but one can be set by hand (members_10).
+func ParsePrices(b []byte) (*Prices, error) <span class="cov6" title="6">{
         dec := json.NewDecoder(bytes.NewReader(b))
         dec.DisallowUnknownFields()
         var p Prices
         if err := dec.Decode(&amp;p); err != nil </span><span class="cov3" title="2">{
                 return nil, fmt.Errorf("prices: %w", err)
         }</span>
-        <span class="cov3" title="2">for id, price := range p.Products </span><span class="cov8" title="9">{
-                if !strings.HasPrefix(price, "price_") </span><span class="cov1" title="1">{
-                        return nil, fmt.Errorf("prices: %s: %q is not a Stripe price ID", id, price)
+        <span class="cov5" title="4">for id, price := range p.Products </span><span class="cov8" title="13">{
+                if price == "" || strings.TrimSpace(price) != price </span><span class="cov3" title="2">{
+                        return nil, fmt.Errorf("prices: %s: price ID must be a non-empty string without surrounding space", id)
                 }</span>
         }
-        <span class="cov1" title="1">return &amp;p, nil</span>
+        <span class="cov3" title="2">return &amp;p, nil</span>
 }
 
 // liveProduct is a product as the admin API returns it; Entitlements stays raw so it round-trips
@@ -3712,33 +3713,33 @@ type liveProduct struct {
 // products that already exist, which Load never touches. A product that already has the same
 // price is reported as such; one with a different price is left alone and reported, since
 // replacing a live price is a deliberate act, not something a seed re-run should do.
-func (c *Client) ApplyPrices(ctx context.Context, p *Prices, dryRun bool, r *Report) error <span class="cov4" title="3">{
+func (c *Client) ApplyPrices(ctx context.Context, p *Prices, dryRun bool, r *Report) error <span class="cov5" title="4">{
         status, body, err := c.do(ctx, http.MethodGet, "/admin/products?limit=200", nil)
         if err != nil || status != http.StatusOK </span><span class="cov0" title="0">{
                 return fmt.Errorf("prices: listing products: status %d err %v", status, err)
         }</span>
-        <span class="cov4" title="3">var live []liveProduct
+        <span class="cov5" title="4">var live []liveProduct
         if err := json.Unmarshal(body, &amp;live); err != nil </span><span class="cov0" title="0">{
                 return fmt.Errorf("prices: %w", err)
         }</span>
-        <span class="cov4" title="3">byID := make(map[string]liveProduct, len(live))
-        for _, lp := range live </span><span class="cov8" title="9">{
+        <span class="cov5" title="4">byID := make(map[string]liveProduct, len(live))
+        for _, lp := range live </span><span class="cov8" title="12">{
                 byID[lp.ID] = lp
         }</span>
-        <span class="cov4" title="3">ids := make([]string, 0, len(p.Products))
-        for id := range p.Products </span><span class="cov6" title="6">{
+        <span class="cov5" title="4">ids := make([]string, 0, len(p.Products))
+        for id := range p.Products </span><span class="cov7" title="7">{
                 ids = append(ids, id)
         }</span>
-        <span class="cov4" title="3">slices.Sort(ids)
-        for _, id := range ids </span><span class="cov6" title="6">{
+        <span class="cov5" title="4">slices.Sort(ids)
+        for _, id := range ids </span><span class="cov7" title="7">{
                 if err := c.applyPrice(ctx, r, byID, id, p.Products[id], dryRun); err != nil </span><span class="cov1" title="1">{
                         return err
                 }</span>
         }
-        <span class="cov3" title="2">return nil</span>
+        <span class="cov4" title="3">return nil</span>
 }
 
-func (c *Client) applyPrice(ctx context.Context, r *Report, byID map[string]liveProduct, id, price string, dryRun bool) error <span class="cov6" title="6">{
+func (c *Client) applyPrice(ctx context.Context, r *Report, byID map[string]liveProduct, id, price string, dryRun bool) error <span class="cov7" title="7">{
         lp, ok := byID[id]
         switch </span>{
         case !ok &amp;&amp; dryRun:<span class="cov1" title="1">
@@ -3753,14 +3754,14 @@ func (c *Client) applyPrice(ctx context.Context, r *Report, byID map[string]live
                 r.Skipped = append(r.Skipped, "price "+id+" (already set to a different price)")
                 return nil</span>
         }
-        <span class="cov3" title="2">if !dryRun </span><span class="cov1" title="1">{
+        <span class="cov4" title="3">if !dryRun </span><span class="cov3" title="2">{
                 lp.StripePriceID = price
                 status, resp, err := c.do(ctx, http.MethodPut, "/admin/products/"+id, lp)
                 if err != nil || status != http.StatusOK </span><span class="cov0" title="0">{
                         return fmt.Errorf("prices: %s: status %d: %s err %v", id, status, strings.TrimSpace(string(resp)), err)
                 }</span>
         }
-        <span class="cov3" title="2">r.Created = append(r.Created, "price "+id)
+        <span class="cov4" title="3">r.Created = append(r.Created, "price "+id)
         return nil</span>
 }
 </pre>
@@ -3967,16 +3968,16 @@ type ProductVO struct {
         mcore.Auditable
 }
 
-func toProductVO(p models.Product) ProductVO <span class="cov9" title="100">{
+func toProductVO(p models.Product) ProductVO <span class="cov9" title="101">{
         ents := make(map[string]any, len(p.Entitlements))
-        for _, e := range p.Entitlements </span><span class="cov10" title="119">{
-                if e.IsAtLeast() </span><span class="cov7" title="25">{
+        for _, e := range p.Entitlements </span><span class="cov10" title="120">{
+                if e.IsAtLeast() </span><span class="cov7" title="26">{
                         ents[e.Key] = map[string]any{"value": models.FormatValue(e.Type, e.Value), "mode": models.ModeAtLeast}
                         continue</span>
                 }
                 <span class="cov9" title="94">ents[e.Key] = models.FormatValue(e.Type, e.Value)</span>
         }
-        <span class="cov9" title="100">return ProductVO{
+        <span class="cov9" title="101">return ProductVO{
                 ID: p.Slug, Name: p.Name, Description: p.Description, Billing: p.Billing, Repeatable: p.Repeatable, PlanGroup: p.PlanGroup,
                 StripePriceID: p.StripePriceID, Entitlements: ents, Auditable: p.Auditable,
         }</span>
@@ -3993,19 +3994,19 @@ type productBody struct {
         Entitlements  map[string]any `json:"entitlements"`
 }
 
-func (b productBody) input(slug string) catalog.ProductInput <span class="cov8" title="65">{
+func (b productBody) input(slug string) catalog.ProductInput <span class="cov8" title="66">{
         return catalog.ProductInput{
                 Slug: slug, Name: b.Name, Description: b.Description, Billing: b.Billing,
                 Repeatable: b.Repeatable, PlanGroup: b.PlanGroup, StripePriceID: b.StripePriceID, Entitlements: b.Entitlements,
         }
 }</span>
 
-func respondProduct(c *gin.Context, status int, p *models.Product, err error) <span class="cov8" title="65">{
+func respondProduct(c *gin.Context, status int, p *models.Product, err error) <span class="cov8" title="66">{
         if err != nil </span><span class="cov5" title="13">{
                 writeError(c, err)
                 return
         }</span>
-        <span class="cov8" title="52">c.JSON(status, toProductVO(*p))</span>
+        <span class="cov8" title="53">c.JSON(status, toProductVO(*p))</span>
 }
 
 // setupAdminProductHandlers registers the product routes on the admin group.
@@ -4028,13 +4029,13 @@ func setupAdminProductHandlers(a *gin.RouterGroup, svc *catalog.Service) <span c
                 <span class="cov8" title="54">p, err := svc.CreateProduct(c.Request.Context(), authz.Viewer(c), b.input(b.ID))
                 respondProduct(c, http.StatusCreated, p, err)</span>
         })
-        <span class="cov7" title="30">a.PUT("/products/:id", func(c *gin.Context) </span><span class="cov5" title="12">{
+        <span class="cov7" title="30">a.PUT("/products/:id", func(c *gin.Context) </span><span class="cov5" title="13">{
                 var b productBody
                 if c.ShouldBindJSON(&amp;b) != nil </span><span class="cov1" title="1">{
                         badRequest(c, "malformed JSON body")
                         return
                 }</span>
-                <span class="cov5" title="11">p, err := svc.UpdateProduct(c.Request.Context(), authz.Viewer(c), b.input(c.Param("id")))
+                <span class="cov5" title="12">p, err := svc.UpdateProduct(c.Request.Context(), authz.Viewer(c), b.input(c.Param("id")))
                 respondProduct(c, http.StatusOK, p, err)</span>
         })
         <span class="cov7" title="30">a.DELETE("/products/:id", func(c *gin.Context) </span><span class="cov2" title="2">{
@@ -4088,11 +4089,11 @@ func setupBillingHandlers(g *gin.Engine, svc *billing.Service, client *authz.Cli
                 }</span>
                 <span class="cov7" title="12">res, err := svc.Checkout(c.Request.Context(), authz.Viewer(c), tokenEmail(authz.Token(c)),
                         billing.CheckoutRequest{TierID: b.TierID, ProductID: b.ProductID, Quantity: b.Quantity})
-                if err != nil </span><span class="cov6" title="8">{
+                if err != nil </span><span class="cov6" title="7">{
                         writeError(c, err)
                         return
                 }</span>
-                <span class="cov4" title="4">c.JSON(http.StatusOK, SessionVO{URL: res.URL, Switched: res.Switched})</span>
+                <span class="cov5" title="5">c.JSON(http.StatusOK, SessionVO{URL: res.URL, Switched: res.Switched})</span>
         })
 
         <span class="cov10" title="30">s.POST("/portal", func(c *gin.Context) </span><span class="cov2" title="2">{
@@ -4312,7 +4313,7 @@ type MaxExceededVO struct {
 
 // writeError maps a service error to a response. Unexpected errors are logged and reported
 // without detail.
-func writeError(c *gin.Context, err error) <span class="cov10" title="46">{
+func writeError(c *gin.Context, err error) <span class="cov10" title="45">{
         var unknown catalog.UnknownKeysError
         var exceeded catalog.MaxExceededError
         var noIncrease catalog.NoIncreaseError
@@ -4321,7 +4322,7 @@ func writeError(c *gin.Context, err error) <span class="cov10" title="46">{
                 c.JSON(http.StatusConflict, apiv.ErrorVO{Error: "no_increase", Message: err.Error()})</span>
         case errors.As(err, &amp;exceeded):<span class="cov2" title="2">
                 c.JSON(http.StatusConflict, MaxExceededVO{Error: "exceeds_maximum", Message: err.Error(), Key: exceeded.Key, UnitsRemaining: exceeded.Remaining})</span>
-        case errors.Is(err, models.ErrInvalid):<span class="cov6" title="10">
+        case errors.Is(err, models.ErrInvalid):<span class="cov6" title="9">
                 c.JSON(http.StatusBadRequest, apiv.ErrorVO{Error: "invalid_request", Message: err.Error()})</span>
         case errors.As(err, &amp;unknown):<span class="cov2" title="2">
                 c.JSON(http.StatusNotFound, apiv.ErrorVO{Error: "unknown_key", Message: err.Error()})</span>
