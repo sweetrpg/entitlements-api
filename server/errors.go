@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	apiv "github.com/sweetrpg/api-core.go/vo"
 	"github.com/sweetrpg/common.go/logging"
+	"github.com/sweetrpg/entitlements-api/billing"
 	"github.com/sweetrpg/entitlements-api/catalog"
 	"github.com/sweetrpg/entitlements-api/models"
 )
@@ -24,8 +25,11 @@ type MaxExceededVO struct {
 func writeError(c *gin.Context, err error) {
 	var unknown catalog.UnknownKeysError
 	var exceeded catalog.MaxExceededError
+	var provider *billing.ProviderError
 	var noIncrease catalog.NoIncreaseError
 	switch {
+	case errors.As(err, &provider):
+		c.JSON(http.StatusBadGateway, apiv.ErrorVO{Error: "payment_provider_error", Message: provider.PublicMessage()})
 	case errors.As(err, &noIncrease):
 		c.JSON(http.StatusConflict, apiv.ErrorVO{Error: "no_increase", Message: err.Error()})
 	case errors.As(err, &exceeded):

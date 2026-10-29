@@ -85,7 +85,10 @@ func (s *Service) Checkout(ctx context.Context, userID, email string, req Checko
 		return CheckoutResult{}, err
 	}
 	url, err := s.gw.CreateCheckout(ctx, params)
-	return CheckoutResult{URL: url}, err
+	if err != nil {
+		return CheckoutResult{}, providerFailed("checkout", err, "product", req.ProductID, "tier", req.TierID, "price_id", params.PriceID)
+	}
+	return CheckoutResult{URL: url}, nil
 }
 
 // planSwitch is the subscription a checkout would move to another product in its plan group.
@@ -99,7 +102,7 @@ type planSwitch struct {
 func (s *Service) switchPlan(ctx context.Context, userID string, sw *planSwitch, p CheckoutParams) (CheckoutResult, error) {
 	err := s.gw.SwitchPlan(ctx, SwitchParams{SubscriptionID: sw.subscriptionID, PriceID: p.PriceID, ProductID: sw.product.Slug, UserID: userID})
 	if err != nil {
-		return CheckoutResult{}, err
+		return CheckoutResult{}, providerFailed("plan switch", err, "product", sw.product.Slug, "subscription", sw.subscriptionID, "price_id", p.PriceID)
 	}
 	grants, err := s.store.GrantsByExternal(ctx, models.SourceStripeSubscription, sw.subscriptionID)
 	if err != nil {
@@ -231,7 +234,11 @@ func (s *Service) Portal(ctx context.Context, userID string) (string, error) {
 	if customer == "" {
 		return "", data.ErrNotFound
 	}
-	return s.gw.CreatePortal(ctx, customer, s.urls.PortalReturn)
+	url, err := s.gw.CreatePortal(ctx, customer, s.urls.PortalReturn)
+	if err != nil {
+		return "", providerFailed("portal", err, "customer", customer)
+	}
+	return url, nil
 }
 
 // systemActor stamps writes made by webhook events, which no user drives.

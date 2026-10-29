@@ -122,6 +122,18 @@ A refund or dispute finds its grant through the Stripe object IDs stored on the 
 checkout session, invoice, payment intent, charge). A refund on a subscription payment resolves
 only if the charge event names the payment intent or invoice; it does not call back into Stripe.
 
+## Payment provider errors
+
+A failed Stripe call from checkout, the portal, or a plan switch returns **502**
+`{"error": "payment_provider_error", "message": ...}` instead of a bare 500. The message is
+short and safe: `the product's price is not valid` (Stripe says the price does not exist; fix the
+product's `stripe_price_id`), `the payment provider rejected the request`, or `the payment
+provider could not be reached`. The cause is logged at ERROR with `op`, the product or tier,
+`stripe_type`, `stripe_code`, `stripe_param`, `stripe_status`, `stripe_request_id`, and
+`stripe_message` (never keys or Stripe's full error, which can hold payment objects). Price IDs
+stay opaque strings: the service does not guess at their format, so a value that is not a Stripe
+price ID (a lookup key, say) surfaces here.
+
 ## Configuration
 
 | Variable | Source | Purpose |
