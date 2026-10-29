@@ -1,3 +1,12 @@
+## [0.4.2] - 2026-10-29
+
+### 🐛 Bug Fixes
+
+- *(billing)* Return a typed 502 for payment provider failures
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Merge master into develop after v0.4.1
 ## [0.4.1] - 2026-10-29
 
 ### 🐛 Bug Fixes
