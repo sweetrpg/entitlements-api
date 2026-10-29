@@ -217,3 +217,75 @@ func TestPortalChangeLeavesARevokedSubscriptionAlone(t *testing.T) {
 		t.Errorf("grant = %+v", g)
 	}
 }
+
+// strictStore rejects a nil name list the way MongoDB rejects {$in: null} ("$in needs an array").
+// The in-memory store accepts it, which hid a 500 on every plan-group checkout.
+type strictStore struct{ data.Store }
+
+var errInNeedsArray = errors.New("(BadValue) $in needs an array")
+
+func (s strictStore) GetKeys(ctx context.Context, names []string) ([]models.Key, error) {
+	if names == nil {
+		return nil, errInNeedsArray
+	}
+	return s.Store.GetKeys(ctx, names)
+}
+
+func (s strictStore) GetTiers(ctx context.Context, slugs []string) ([]models.Tier, error) {
+	if slugs == nil {
+		return nil, errInNeedsArray
+	}
+	return s.Store.GetTiers(ctx, slugs)
+}
+
+func (s strictStore) GetProducts(ctx context.Context, slugs []string) ([]models.Product, error) {
+	if slugs == nil {
+		return nil, errInNeedsArray
+	}
+	return s.Store.GetProducts(ctx, slugs)
+}
+
+func strictPlanSetup(t *testing.T) (*Service, *data.MemoryStore, *fakeGateway) {
+	t.Helper()
+	s, _, st, gw := planSetup(t)
+	strict := strictStore{st}
+	s.store = strict
+	s.limits = catalog.New(strict)
+	return s, st, gw
+}
+
+func TestFirstPlanGroupCheckoutDoesNotSendANilListToTheStore(t *testing.T) {
+	for _, slug := range []string{"members-10", "members-20"} {
+		t.Run(slug, func(t *testing.T) {
+			s, _, gw := strictPlanSetup(t)
+			res, err := s.Checkout(context.Background(), "user-7", "", CheckoutRequest{ProductID: slug})
+			if err != nil || res.URL == "" || res.Switched {
+				t.Fatalf("result = %+v err = %v", res, err)
+			}
+			if gw.checkout.PriceID != "price_"+slug || gw.checkout.ProductID != slug || gw.checkout.Quantity != 1 {
+				t.Errorf("params = %+v", gw.checkout)
+			}
+		})
+	}
+}
+
+func TestPlanSwitchAlsoWorksAgainstTheStrictStore(t *testing.T) {
+	s, _, gw := strictPlanSetup(t)
+	subscribe(t, s, "user-6", "sub_m1", "members-10")
+	res, err := s.Checkout(context.Background(), "user-6", "", CheckoutRequest{ProductID: "members-20"})
+	if err != nil || !res.Switched || gw.switched.PriceID != "price_members-20" {
+		t.Errorf("result = %+v err = %v switch = %+v", res, err, gw.switched)
+	}
+}
+
+func TestRecurringProductsCheckOutAgainstTheStrictStore(t *testing.T) {
+	s, _, gw := strictPlanSetup(t)
+	for _, slug := range []string{"encounters", "plan-a"} {
+		if res, err := s.Checkout(context.Background(), "user-8", "", CheckoutRequest{ProductID: slug}); err != nil || res.URL == "" {
+			t.Errorf("%s: result = %+v err = %v", slug, res, err)
+		}
+	}
+	if gw.checkout.PriceID != "price_plan-a" {
+		t.Errorf("params = %+v", gw.checkout)
+	}
+}
