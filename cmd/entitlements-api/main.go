@@ -84,7 +84,9 @@ func main() {
 
 	store := data.NewMongoStore(database.Db)
 	if err := store.EnsureIndexes(context.Background()); err != nil {
+		// Without its unique indexes the database does not enforce uniqueness, so refuse to serve.
 		logging.Logger.Error("Failed to ensure indexes", "error", err.Error())
+		os.Exit(1)
 	}
 
 	setupAcuator(r)

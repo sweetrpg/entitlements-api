@@ -51,7 +51,10 @@ type Key struct {
 	Description string             `bson:"description" json:"description"`
 	TTLSeconds  int                `bson:"ttl_seconds" json:"ttl_seconds"`
 	// Max caps every effective value of a limit key; nil means no maximum.
-	Max             *int64 `bson:"max,omitempty" json:"max,omitempty"`
+	Max *int64 `bson:"max,omitempty" json:"max,omitempty"`
+	// Live is true while the key is not soft-deleted. It exists only so a unique partial index can
+	// cover live documents; read paths filter on deleted_at.
+	Live            bool `bson:"live,omitempty" json:"-"`
 	mcore.Auditable `bson:",inline"`
 }
 
@@ -71,6 +74,7 @@ type Tier struct {
 	Description     string             `bson:"description" json:"description"`
 	Values          []TierValue        `bson:"values" json:"-"`
 	StripePriceID   string             `bson:"stripe_price_id,omitempty" json:"stripe_price_id,omitempty"`
+	Live            bool               `bson:"live,omitempty" json:"-"` // see Key.Live
 	mcore.Auditable `bson:",inline"`
 }
 
@@ -152,6 +156,7 @@ type Product struct {
 	PlanGroup       string               `bson:"plan_group,omitempty" json:"plan_group,omitempty"`
 	StripePriceID   string               `bson:"stripe_price_id,omitempty" json:"stripe_price_id,omitempty"`
 	Entitlements    []ProductEntitlement `bson:"entitlements" json:"-"`
+	Live            bool                 `bson:"live,omitempty" json:"-"` // see Key.Live
 	mcore.Auditable `bson:",inline"`
 }
 

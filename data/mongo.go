@@ -3,6 +3,7 @@ package data
 import (
 	"context"
 	"errors"
+	"fmt"
 	"regexp"
 	"time"
 
@@ -27,12 +28,14 @@ func NewMongoStore(db *mongo.Database) *MongoStore { return &MongoStore{db: db} 
 // notDeleted is merged into every catalog read so a new read path inherits the tombstone filter.
 var notDeleted = bson.E{Key: "deleted_at", Value: nil}
 
-// EnsureIndexes creates the unique-among-live indexes and the lookup indexes. Safe to call on
-// every startup.
-func (s *MongoStore) EnsureIndexes(ctx context.Context) error {
+// indexSpecs is every index the service relies on, by collection. It is a pure function so a test
+// can check each definition against what MongoDB accepts without a database.
+func indexSpecs() map[string][]mongo.IndexModel {
+	// MongoDB partial indexes cannot express "deleted_at is absent" ($exists: false is rejected),
+	// so live documents carry live: true, set on insert and removed on soft delete.
 	liveOnly := options.Index().SetUnique(true).
-		SetPartialFilterExpression(bson.D{{Key: "deleted_at", Value: bson.D{{Key: "$exists", Value: false}}}})
-	idx := map[string][]mongo.IndexModel{
+		SetPartialFilterExpression(bson.D{{Key: "live", Value: true}})
+	return map[string][]mongo.IndexModel{
 		constants.KeysCollection:  {{Keys: bson.D{{Key: "key", Value: 1}}, Options: liveOnly}},
 		constants.TiersCollection: {{Keys: bson.D{{Key: "slug", Value: 1}}, Options: liveOnly}},
 		constants.ProductsCollection: {
@@ -48,12 +51,35 @@ func (s *MongoStore) EnsureIndexes(ctx context.Context) error {
 		constants.StripeCustomersCollection: {{Keys: bson.D{{Key: "user_id", Value: 1}}, Options: options.Index().SetUnique(true)}},
 		constants.AuditCollection:           {{Keys: bson.D{{Key: "at", Value: -1}}}},
 	}
+}
+
+// EnsureIndexes creates the unique-among-live indexes and the lookup indexes. Safe to call on
+// every startup.
+func (s *MongoStore) EnsureIndexes(ctx context.Context) error {
 	// The first grants index was unique on (source, external_id) alone, which would block a
 	// bundle's several grants sharing one external ID. Drop it; a missing index is not an error.
 	_, _ = s.db.Collection(constants.GrantsCollection).Indexes().DropOne(ctx, "source_1_external_id_1")
-	for coll, ms := range idx {
+	if err := s.backfillLive(ctx); err != nil {
+		return err
+	}
+	for coll, ms := range indexSpecs() {
 		if _, err := s.db.Collection(coll).Indexes().CreateMany(ctx, ms); err != nil {
-			return err
+			return fmt.Errorf("indexes on %s: %w", coll, err)
+		}
+	}
+	return nil
+}
+
+// liveCollections are the soft-deleted catalog collections whose uniqueness is among live rows.
+var liveCollections = []string{constants.KeysCollection, constants.TiersCollection, constants.ProductsCollection}
+
+// backfillLive marks documents written before the live flag existed. It is idempotent and only
+// touches live documents that lack the flag, so it is a no-op after the first startup.
+func (s *MongoStore) backfillLive(ctx context.Context) error {
+	for _, coll := range liveCollections {
+		f := bson.D{{Key: "live", Value: bson.D{{Key: "$exists", Value: false}}}, notDeleted}
+		if _, err := s.db.Collection(coll).UpdateMany(ctx, f, bson.D{{Key: "$set", Value: bson.D{{Key: "live", Value: true}}}}); err != nil {
+			return fmt.Errorf("backfill live on %s: %w", coll, err)
 		}
 	}
 	return nil
@@ -89,6 +115,7 @@ func page(sortKey string, dir int, limit, skip int64) *options.FindOptions {
 
 func (s *MongoStore) InsertKey(ctx context.Context, k *models.Key, actor string) error {
 	mcore.StampCreate(&k.Auditable, actor, time.Now().UTC())
+	k.Live = true
 	return s.insert(ctx, constants.KeysCollection, k)
 }
 
@@ -127,7 +154,8 @@ func (s *MongoStore) DeleteKey(ctx context.Context, name, actor string) error {
 
 func (s *MongoStore) softDelete(ctx context.Context, coll string, filter bson.D, actor string) error {
 	set := bson.D{{Key: "deleted_at", Value: time.Now().UTC()}, {Key: "deleted_by", Value: actor}}
-	res, err := s.db.Collection(coll).UpdateOne(ctx, filter, bson.D{{Key: "$set", Value: set}})
+	update := bson.D{{Key: "$set", Value: set}, {Key: "$unset", Value: bson.D{{Key: "live", Value: ""}}}}
+	res, err := s.db.Collection(coll).UpdateOne(ctx, filter, update)
 	if err != nil {
 		return err
 	}
@@ -139,6 +167,7 @@ func (s *MongoStore) softDelete(ctx context.Context, coll string, filter bson.D,
 
 func (s *MongoStore) InsertTier(ctx context.Context, t *models.Tier, actor string) error {
 	mcore.StampCreate(&t.Auditable, actor, time.Now().UTC())
+	t.Live = true
 	return s.insert(ctx, constants.TiersCollection, t)
 }
 
@@ -170,6 +199,7 @@ func (s *MongoStore) DeleteTier(ctx context.Context, slug, actor string) error {
 
 func (s *MongoStore) InsertProduct(ctx context.Context, p *models.Product, actor string) error {
 	mcore.StampCreate(&p.Auditable, actor, time.Now().UTC())
+	p.Live = true
 	return s.insert(ctx, constants.ProductsCollection, p)
 }
 
