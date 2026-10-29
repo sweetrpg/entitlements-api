@@ -190,6 +190,9 @@ func (s *Service) findPlanMember(ctx context.Context, userID string, prod models
 			ids = append(ids, g.ProductID)
 		}
 	}
+	if len(ids) == 0 {
+		return nil, nil // no subscription to compare against
+	}
 	held, err := s.store.GetProducts(ctx, ids)
 	if err != nil {
 		return nil, err
