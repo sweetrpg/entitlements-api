@@ -99,7 +99,7 @@ go run ./cmd/seed-catalog -dry-run   # drop -dry-run to write
 The loader only creates what is missing; an existing row, or an already-set default tier, is left
 alone, so re-running cannot undo an edit or clear a Stripe price ID. Products ship with no
 `stripe_price_id` (checkout rejects them). Price IDs differ per Stripe environment, so they live in
-an overlay, `seed/prices.dev.json` (`{"products": {"<product id>": "price_..."}}`), applied with
+an overlay, `seed/prices.dev.json` (`{"products": {"<product id>": "<price id>"}}`; price IDs are opaque strings, not required to start with `price_`), applied with
 `-prices seed/prices.dev.json`. The overlay also works on products that already exist: it sets a
 price only where the product has none, leaves a different existing price alone (reported as
 skipped), and keeps every other field. `-file` loads a different seed. Members-per-session tiers above 4 are

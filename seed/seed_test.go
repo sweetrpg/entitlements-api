@@ -228,16 +228,20 @@ func TestDevPriceOverlayOnlyNamesSeededProducts(t *testing.T) {
 			t.Errorf("overlay prices unknown product %s", id)
 		}
 	}
-	if len(p.Products) != 8 {
-		t.Errorf("prices = %d, want 8 (members-10 is pending)", len(p.Products))
+	if len(p.Products) != 9 {
+		t.Errorf("prices = %d, want 9", len(p.Products))
+	}
+	if p.Products["members-10"] != "members_10" {
+		t.Errorf("members-10 price = %q", p.Products["members-10"])
 	}
 }
 
 func TestParsePricesRejectsBadInput(t *testing.T) {
 	for name, in := range map[string]string{
-		"not a price id": `{"products":{"a":"prod_123"}}`,
-		"unknown field":  `{"products":{},"extra":1}`,
-		"garbage":        `nope`,
+		"empty":         `{"products":{"a":""}}`,
+		"padded":        `{"products":{"a":" price_x"}}`,
+		"unknown field": `{"products":{},"extra":1}`,
+		"garbage":       `nope`,
 	} {
 		if _, err := ParsePrices([]byte(in)); err == nil {
 			t.Errorf("%s accepted", name)
@@ -298,5 +302,28 @@ func TestApplyPricesDryRunAndMissingProducts(t *testing.T) {
 	}
 	if err := c.ApplyPrices(context.Background(), &Prices{Products: map[string]string{"z": "price_z"}}, false, &Report{}); err == nil {
 		t.Error("a missing product was not an error")
+	}
+}
+
+func TestPriceIDsAreOpaque(t *testing.T) {
+	p, err := ParsePrices([]byte(`{"products":{"a":"members_10","b":"anything-goes.123"}}`))
+	if err != nil || p.Products["a"] != "members_10" {
+		t.Fatalf("prices = %+v err = %v", p, err)
+	}
+
+	var put []byte
+	srv, _ := stub(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(liveProducts()))
+			return
+		}
+		put, _ = io.ReadAll(r.Body)
+	})
+	rep := &Report{}
+	if err := (&Client{BaseURL: srv.URL, Token: "t"}).ApplyPrices(context.Background(), &Prices{Products: map[string]string{"a": "members_10"}}, false, rep); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(put), `"stripe_price_id":"members_10"`) || len(rep.Created) != 1 {
+		t.Errorf("PUT body = %s report = %+v", put, rep)
 	}
 }

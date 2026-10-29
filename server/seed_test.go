@@ -130,16 +130,17 @@ func TestDevPricesApplyThroughTheAdminAPIAndMakeProductsPurchasable(t *testing.T
 	if err := client.ApplyPrices(context.Background(), prices, false, first); err != nil {
 		t.Fatal(err)
 	}
-	if len(first.Created) != 8 {
+	if len(first.Created) != 9 {
 		t.Fatalf("report = %+v", first)
 	}
 	again := &seed.Report{}
-	if err := client.ApplyPrices(context.Background(), prices, false, again); err != nil || len(again.Created) != 0 || len(again.Existing) != 8 {
+	if err := client.ApplyPrices(context.Background(), prices, false, again); err != nil || len(again.Created) != 0 || len(again.Existing) != 9 {
 		t.Fatalf("second apply = %+v err = %v", again, err)
 	}
 
 	mustCode(t, do(r, "POST", "/billing/checkout", userTok, `{"product_id":"encounters"}`), http.StatusOK)
-	mustCode(t, do(r, "POST", "/billing/checkout", userTok, `{"product_id":"members-10"}`), http.StatusBadRequest) // price pending
+	// members-10's price ID is a hand-set value without the price_ prefix; checkout treats it as opaque.
+	mustCode(t, do(r, "POST", "/billing/checkout", userTok, `{"product_id":"members-10"}`), http.StatusOK)
 
 	var products []ProductVO
 	_ = json.Unmarshal(do(r, "GET", "/admin/products", adminTok, "").Body.Bytes(), &products)
