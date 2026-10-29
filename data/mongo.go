@@ -120,6 +120,9 @@ func (s *MongoStore) InsertKey(ctx context.Context, k *models.Key, actor string)
 }
 
 func (s *MongoStore) GetKeys(ctx context.Context, names []string) ([]models.Key, error) {
+	if len(names) == 0 {
+		return nil, nil // {$in: null} is a MongoDB error, and nothing can match anyway
+	}
 	f := bson.D{notDeleted, {Key: "key", Value: bson.D{{Key: "$in", Value: names}}}}
 	return find[models.Key](ctx, s.db.Collection(constants.KeysCollection), f, nil)
 }
@@ -172,6 +175,9 @@ func (s *MongoStore) InsertTier(ctx context.Context, t *models.Tier, actor strin
 }
 
 func (s *MongoStore) GetTiers(ctx context.Context, slugs []string) ([]models.Tier, error) {
+	if len(slugs) == 0 {
+		return nil, nil
+	}
 	f := bson.D{notDeleted, {Key: "slug", Value: bson.D{{Key: "$in", Value: slugs}}}}
 	return find[models.Tier](ctx, s.db.Collection(constants.TiersCollection), f, nil)
 }
@@ -204,6 +210,9 @@ func (s *MongoStore) InsertProduct(ctx context.Context, p *models.Product, actor
 }
 
 func (s *MongoStore) GetProducts(ctx context.Context, slugs []string) ([]models.Product, error) {
+	if len(slugs) == 0 {
+		return nil, nil
+	}
 	f := bson.D{notDeleted, {Key: "slug", Value: bson.D{{Key: "$in", Value: slugs}}}}
 	return find[models.Product](ctx, s.db.Collection(constants.ProductsCollection), f, nil)
 }
