@@ -38,6 +38,7 @@ func loadEvent(t *testing.T, name string) Event {
 }
 
 type fakeGateway struct {
+	err        error // returned by every call when set
 	switched   SwitchParams
 	checkout   CheckoutParams
 	portalCust string
@@ -45,16 +46,25 @@ type fakeGateway struct {
 }
 
 func (f *fakeGateway) CreateCheckout(_ context.Context, p CheckoutParams) (string, error) {
+	if f.err != nil {
+		return "", f.err
+	}
 	f.checkout = p
 	return "https://checkout.example/session", nil
 }
 
 func (f *fakeGateway) SwitchPlan(_ context.Context, p SwitchParams) error {
+	if f.err != nil {
+		return f.err
+	}
 	f.switched = p
 	return nil
 }
 
 func (f *fakeGateway) CreatePortal(_ context.Context, customerID, returnURL string) (string, error) {
+	if f.err != nil {
+		return "", f.err
+	}
 	f.portalCust, f.portalBack = customerID, returnURL
 	return "https://portal.example/session", nil
 }
