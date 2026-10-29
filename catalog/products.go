@@ -17,6 +17,7 @@ type ProductInput struct {
 	Description   string
 	Billing       string
 	Repeatable    bool
+	PlanGroup     string
 	StripePriceID string
 	Entitlements  map[string]any
 }
@@ -81,13 +82,21 @@ func (s *Service) productFromInput(ctx context.Context, in ProductInput) (*model
 	if !slices.Contains([]string{models.BillingOneOff, models.BillingRecurring}, in.Billing) {
 		return nil, fmt.Errorf("%w: billing must be one_off or recurring", models.ErrInvalid)
 	}
+	if in.PlanGroup != "" {
+		if in.Billing != models.BillingRecurring {
+			return nil, fmt.Errorf("%w: only recurring products can be in a plan group", models.ErrInvalid)
+		}
+		if err := models.ValidateTierSlug(in.PlanGroup); err != nil {
+			return nil, fmt.Errorf("%w: plan_group must be lowercase letters, digits, - or _ (max 64)", models.ErrInvalid)
+		}
+	}
 	ents, err := s.buildEntitlements(ctx, in.Entitlements)
 	if err != nil {
 		return nil, err
 	}
 	return &models.Product{
 		Slug: in.Slug, Name: in.Name, Description: in.Description, Billing: in.Billing,
-		Repeatable: in.Repeatable, StripePriceID: in.StripePriceID, Entitlements: ents,
+		Repeatable: in.Repeatable, PlanGroup: in.PlanGroup, StripePriceID: in.StripePriceID, Entitlements: ents,
 	}, nil
 }
 

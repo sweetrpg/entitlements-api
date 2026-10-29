@@ -17,9 +17,11 @@ import (
 )
 
 // SessionVO is the response to a checkout or portal request: the Stripe-hosted URL to send the
-// user to.
+// user to. A checkout that switched an existing subscription to another plan returns
+// switched=true and no URL.
 type SessionVO struct {
-	URL string `json:"url"`
+	URL      string `json:"url,omitempty"`
+	Switched bool   `json:"switched,omitempty"`
 }
 
 type checkoutBody struct {
@@ -39,13 +41,13 @@ func setupBillingHandlers(g *gin.Engine, svc *billing.Service, client *authz.Cli
 			badRequest(c, "malformed JSON body")
 			return
 		}
-		url, err := svc.Checkout(c.Request.Context(), authz.Viewer(c), tokenEmail(authz.Token(c)),
+		res, err := svc.Checkout(c.Request.Context(), authz.Viewer(c), tokenEmail(authz.Token(c)),
 			billing.CheckoutRequest{TierID: b.TierID, ProductID: b.ProductID, Quantity: b.Quantity})
 		if err != nil {
 			writeError(c, err)
 			return
 		}
-		c.JSON(http.StatusOK, SessionVO{URL: url})
+		c.JSON(http.StatusOK, SessionVO{URL: res.URL, Switched: res.Switched})
 	})
 
 	s.POST("/portal", func(c *gin.Context) {

@@ -10,7 +10,10 @@ import (
 
 	"github.com/sweetrpg/common.go/logging"
 	"github.com/sweetrpg/entitlements-api/catalog"
+	"github.com/sweetrpg/entitlements-api/data"
 	"github.com/sweetrpg/entitlements-api/models"
+	mcore "github.com/sweetrpg/model-core.go/models"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // Event is a verified Stripe event reduced to what the handlers need.
@@ -138,7 +141,7 @@ func (s *Service) onSubscriptionUpdated(ctx context.Context, raw json.RawMessage
 	case "unpaid", "canceled", "incomplete_expired":
 		return s.endGrants(ctx, models.SourceStripeSubscription, sub.ID)
 	}
-	return s.applyQuantity(ctx, sub)
+	return s.followSubscription(ctx, sub)
 }
 
 func (s *Service) onSubscriptionDeleted(ctx context.Context, raw json.RawMessage) error {
@@ -267,36 +270,98 @@ func (s *Service) mergeGrant(ctx context.Context, cur *models.Grant, p purchase)
 	return s.store.UpdateGrant(ctx, cur, systemActor)
 }
 
-// applyQuantity follows a subscription quantity change: each of the subscription's grants takes
-// its entitlement's value x the new quantity. Stripe has already accepted the change, so a result
-// above a key's maximum cannot be refused here; it is logged and checks clamp it.
-func (s *Service) applyQuantity(ctx context.Context, sub subscription) error {
-	productID, qty := sub.Metadata["product_id"], sub.quantity()
-	if productID == "" || qty < 1 {
+// followSubscription reconciles a subscription's grants with its current price and quantity. The
+// price decides the product (a customer who changed plan in the billing portal changes the
+// price, not our metadata); metadata is the fallback. Stripe has already accepted the change, so
+// a result above a key's maximum cannot be refused here; it is logged and checks clamp it.
+func (s *Service) followSubscription(ctx context.Context, sub subscription) error {
+	qty := sub.quantity()
+	if qty < 1 {
 		return nil
 	}
-	products, err := s.store.GetProducts(ctx, []string{productID})
-	if err != nil || len(products) == 0 {
+	prod, err := s.productFor(ctx, sub)
+	if err != nil || prod == nil {
 		return err
 	}
 	grants, err := s.store.GrantsByExternal(ctx, models.SourceStripeSubscription, sub.ID)
-	if err != nil {
+	if err != nil || len(grants) == 0 {
 		return err
 	}
-	for _, e := range products[0].Entitlements {
-		for i := range grants {
-			g := &grants[i]
-			if g.Key != e.Key || g.Status == models.GrantRevoked || (g.Quantity == qty && g.Value == grantValue(e, qty)) {
-				continue
-			}
-			g.Value, g.Quantity = grantValue(e, qty), qty
-			if err := s.store.UpdateGrant(ctx, g, systemActor); err != nil {
+	return s.replaceEntitlements(ctx, grants, *prod, qty)
+}
+
+func (s *Service) productFor(ctx context.Context, sub subscription) (*models.Product, error) {
+	if price := sub.priceID(); price != "" {
+		p, err := s.store.ProductByPriceID(ctx, price)
+		if err == nil {
+			return p, nil
+		}
+		if !errors.Is(err, data.ErrNotFound) {
+			return nil, err
+		}
+	}
+	if id := sub.Metadata["product_id"]; id != "" {
+		products, err := s.store.GetProducts(ctx, []string{id})
+		if err != nil || len(products) == 0 {
+			return nil, err
+		}
+		return &products[0], nil
+	}
+	return nil, nil
+}
+
+// replaceEntitlements makes a purchase's grants match a product at a quantity: a grant for each
+// of the product's keys (updated in place, or created), and any grant for a key it no longer
+// has ended. It keeps one set of grants per Stripe object, sharing its ID and validity. A revoked
+// purchase is left alone.
+func (s *Service) replaceEntitlements(ctx context.Context, grants []models.Grant, prod models.Product, qty int64) error {
+	if len(grants) == 0 || slices.ContainsFunc(grants, func(g models.Grant) bool { return g.Status == models.GrantRevoked }) {
+		return nil
+	}
+	keep := map[string]bool{}
+	for _, e := range prod.Entitlements {
+		keep[e.Key] = true
+		want := grantValue(e, qty)
+		i := slices.IndexFunc(grants, func(g models.Grant) bool { return g.Key == e.Key })
+		if i < 0 {
+			g := grants[0]
+			g.ID, g.Auditable, g.TierID, g.Status = primitive.NilObjectID, mcore.Auditable{}, "", models.GrantActive
+			g.Key, g.Value, g.ProductID, g.Quantity, g.Mode = e.Key, want, prod.Slug, qty, e.Mode
+			if err := s.store.InsertGrant(ctx, &g, systemActor); err != nil {
 				return err
 			}
-			s.warnIfOverMaximum(ctx, g)
+			continue
+		}
+		g := &grants[i]
+		if g.Value == want && g.Quantity == qty && g.ProductID == prod.Slug && g.Mode == e.Mode && g.Status == models.GrantActive {
+			continue
+		}
+		g.Value, g.Quantity, g.ProductID, g.Mode, g.Status = want, qty, prod.Slug, e.Mode, models.GrantActive
+		if err := s.store.UpdateGrant(ctx, g, systemActor); err != nil {
+			return err
+		}
+		s.warnIfOverMaximum(ctx, g)
+	}
+	for i := range grants {
+		if keep[grants[i].Key] || grants[i].Status != models.GrantActive {
+			continue
+		}
+		grants[i].Status = models.GrantEnded
+		if err := s.store.UpdateGrant(ctx, &grants[i], systemActor); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+// quantityOf is the quantity a purchase was made at, 1 if unrecorded.
+func quantityOf(grants []models.Grant) int64 {
+	for _, g := range grants {
+		if g.Quantity > 0 {
+			return g.Quantity
+		}
+	}
+	return 1
 }
 
 // warnIfOverMaximum probes whether the user now holds more than the key's maximum.

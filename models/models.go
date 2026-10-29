@@ -141,12 +141,15 @@ func (e ProductEntitlement) IsAtLeast() bool { return e.Mode == ModeAtLeast }
 // with more than one entitlement is a bundle. Repeatable means it can be bought with a quantity
 // (recurring) or more than once (one-off); otherwise a user holds at most one.
 type Product struct {
-	ID              primitive.ObjectID   `bson:"_id,omitempty" json:"-"`
-	Slug            string               `bson:"slug" json:"id"`
-	Name            string               `bson:"name" json:"name"`
-	Description     string               `bson:"description" json:"description"`
-	Billing         string               `bson:"billing" json:"billing"`
-	Repeatable      bool                 `bson:"repeatable" json:"repeatable"`
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"-"`
+	Slug        string             `bson:"slug" json:"id"`
+	Name        string             `bson:"name" json:"name"`
+	Description string             `bson:"description" json:"description"`
+	Billing     string             `bson:"billing" json:"billing"`
+	Repeatable  bool               `bson:"repeatable" json:"repeatable"`
+	// PlanGroup names a set of recurring products that replace each other: a user holds at most
+	// one active subscription per group. Empty means the product is in no group.
+	PlanGroup       string               `bson:"plan_group,omitempty" json:"plan_group,omitempty"`
 	StripePriceID   string               `bson:"stripe_price_id,omitempty" json:"stripe_price_id,omitempty"`
 	Entitlements    []ProductEntitlement `bson:"entitlements" json:"-"`
 	mcore.Auditable `bson:",inline"`

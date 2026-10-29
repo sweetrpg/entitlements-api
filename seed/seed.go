@@ -54,6 +54,7 @@ type Product struct {
 	Description   string         `json:"description"`
 	Billing       string         `json:"billing"`
 	Repeatable    bool           `json:"repeatable,omitempty"`
+	PlanGroup     string         `json:"plan_group,omitempty"`
 	StripePriceID string         `json:"stripe_price_id,omitempty"`
 	Entitlements  map[string]any `json:"entitlements"`
 }

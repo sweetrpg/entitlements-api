@@ -28,6 +28,17 @@ type CheckoutParams struct {
 type Gateway interface {
 	CreateCheckout(ctx context.Context, p CheckoutParams) (url string, err error)
 	CreatePortal(ctx context.Context, customerID, returnURL string) (url string, err error)
+	// SwitchPlan moves an existing subscription to another price, prorated by Stripe, instead of
+	// creating a second subscription.
+	SwitchPlan(ctx context.Context, p SwitchParams) error
+}
+
+// SwitchParams names the subscription to change and the product it moves to.
+type SwitchParams struct {
+	SubscriptionID string
+	PriceID        string
+	ProductID      string
+	UserID         string
 }
 
 // StripeGateway calls the live Stripe API. It is a thin translation layer with no rules of its
@@ -78,6 +89,30 @@ func (g *StripeGateway) CreateCheckout(ctx context.Context, p CheckoutParams) (s
 		return "", fmt.Errorf("create checkout session: %w", err)
 	}
 	return sess.URL, nil
+}
+
+// SwitchPlan replaces the subscription's price with the new one, keeping its quantity, and
+// records the new product in the subscription's metadata. Stripe prorates the change.
+func (g *StripeGateway) SwitchPlan(ctx context.Context, p SwitchParams) error {
+	sub, err := g.client.V1Subscriptions.Retrieve(ctx, p.SubscriptionID, nil)
+	if err != nil {
+		return fmt.Errorf("retrieve subscription: %w", err)
+	}
+	if sub.Items == nil || len(sub.Items.Data) == 0 {
+		return fmt.Errorf("subscription %s has no items", p.SubscriptionID)
+	}
+	item := sub.Items.Data[0]
+	_, err = g.client.V1Subscriptions.Update(ctx, p.SubscriptionID, &stripe.SubscriptionUpdateParams{
+		Items: []*stripe.SubscriptionUpdateItemParams{{
+			ID: stripe.String(item.ID), Price: stripe.String(p.PriceID), Quantity: stripe.Int64(max(item.Quantity, 1)),
+		}},
+		ProrationBehavior: stripe.String("create_prorations"),
+		Metadata:          map[string]string{"user_id": p.UserID, "product_id": p.ProductID},
+	})
+	if err != nil {
+		return fmt.Errorf("switch subscription: %w", err)
+	}
+	return nil
 }
 
 // CreatePortal opens the Stripe billing portal for a customer.

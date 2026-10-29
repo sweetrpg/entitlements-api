@@ -233,11 +233,23 @@ func (m *MemoryStore) UpdateProduct(_ context.Context, in *models.Product, actor
 	if p == nil {
 		return nil, ErrNotFound
 	}
-	p.Name, p.Description, p.Billing, p.Repeatable = in.Name, in.Description, in.Billing, in.Repeatable
+	p.Name, p.Description, p.Billing, p.Repeatable, p.PlanGroup = in.Name, in.Description, in.Billing, in.Repeatable, in.PlanGroup
 	p.StripePriceID, p.Entitlements = in.StripePriceID, in.Entitlements
 	mcore.StampUpdate(&p.Auditable, actor, m.now().UTC())
 	c := *p
 	return &c, nil
+}
+
+func (m *MemoryStore) ProductByPriceID(_ context.Context, priceID string) (*models.Product, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, p := range m.prods {
+		if priceID != "" && p.StripePriceID == priceID && live(p.Auditable) {
+			c := *p
+			return &c, nil
+		}
+	}
+	return nil, ErrNotFound
 }
 
 func (m *MemoryStore) DeleteProduct(_ context.Context, slug, actor string) error {

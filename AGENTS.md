@@ -61,6 +61,9 @@ go test -race ./...
   refs, so a bundle ends together. Grants are unique on (source, external_id, key).
 - **Seed:** `seed/initiative.json` is data loaded by `cmd/seed-catalog` through the admin API,
   create-only. Do not put catalog values in Go code.
+- **Plan groups:** `billing/service.go` `findPlanMember` finds the user's subscription in the
+  product's group; `replaceEntitlements` (`billing/webhook.go`) rewrites a subscription's grants
+  for a new product or quantity, from checkout and from `customer.subscription.updated`.
 - **Audit:** catalog writes and their audit entry are not one transaction. A failed audit append
   is logged at ERROR and the write still succeeds.
 - **Delete strategy:** catalog keys and tiers are soft-deleted; the audit collection is
