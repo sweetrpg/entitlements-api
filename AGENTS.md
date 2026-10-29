@@ -59,8 +59,9 @@ go test -race ./...
 - **Products:** a purchase makes one grant per entitlement sharing the Stripe object ID
   (`billing/webhook.go`, `applyPurchase`); refund, dispute, and cancel act on the shared ID or
   refs, so a bundle ends together. Grants are unique on (source, external_id, key).
-- **Seed:** `seed/initiative.json` is data loaded by `cmd/seed-catalog` through the admin API,
-  create-only. Do not put catalog values in Go code.
+- **Seed:** `seed/initiative.json` and `seed/prices.dev.json` are data, loaded through the admin API
+  by `sweetrpg entitlements seed` (sweetrpg-cli, create-only). This repo has no loader of its own;
+  `server/seed_test.go` checks the files against the real routes. Do not put catalog values in Go code.
 - **Plan groups:** `billing/service.go` `findPlanMember` finds the user's subscription in the
   product's group; `replaceEntitlements` (`billing/webhook.go`) rewrites a subscription's grants
   for a new product or quantity, from checkout and from `customer.subscription.updated`.
