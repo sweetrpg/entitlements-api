@@ -71,6 +71,12 @@ func clamp(k models.Key, v int64) int64 {
 // rawValues resolves the unclamped effective value of each key. Any name missing from keys fails
 // the call with UnknownKeysError.
 func (s *Service) rawValues(ctx context.Context, userID string, names []string, keys []models.Key) (map[string]models.Key, map[string]int64, error) {
+	return s.rawValuesWith(ctx, userID, names, keys, nil, "")
+}
+
+// rawValuesWith is rawValues with extra hypothetical grants counted and the grants of one Stripe
+// object (replacing, if set) left out, to project a purchase.
+func (s *Service) rawValuesWith(ctx context.Context, userID string, names []string, keys []models.Key, extra []models.Grant, replacing string) (map[string]models.Key, map[string]int64, error) {
 	byName := make(map[string]models.Key, len(keys))
 	for _, k := range keys {
 		byName[k.Key] = k
@@ -90,6 +96,10 @@ func (s *Service) rawValues(ctx context.Context, userID string, names []string, 
 	if err != nil {
 		return nil, nil, err
 	}
+	if replacing != "" {
+		grants = slices.DeleteFunc(grants, func(g models.Grant) bool { return g.ExternalID == replacing })
+	}
+	grants = append(grants, extra...)
 	tiers, err := s.loadTiers(ctx, grants)
 	if err != nil {
 		return nil, nil, err

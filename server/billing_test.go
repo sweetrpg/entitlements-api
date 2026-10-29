@@ -25,6 +25,8 @@ func (fakeStripe) CreateCheckout(_ context.Context, p billing.CheckoutParams) (s
 	return "https://checkout.example/" + p.UserID + "/" + p.TierID + p.ProductID + "?email=" + p.Email, nil
 }
 
+func (fakeStripe) SwitchPlan(context.Context, billing.SwitchParams) error { return nil }
+
 func (fakeStripe) CreatePortal(_ context.Context, customerID, _ string) (string, error) {
 	return "https://portal.example/" + customerID, nil
 }
@@ -243,4 +245,57 @@ func TestProductCheckoutOverHTTPAndMaximumRefusal(t *testing.T) {
 		t.Errorf("body = %+v", vo)
 	}
 	mustCode(t, do(r, "POST", "/billing/checkout", userTok, `{"product_id":"slot","tier_id":"x"}`), http.StatusBadRequest)
+}
+
+func TestAdminProductRendersAtLeastEntitlements(t *testing.T) {
+	r, _ := newRouter(t)
+	mustCode(t, do(r, "POST", "/admin/keys", adminTok, `{"key":"a.members","type":"limit"}`), http.StatusCreated)
+	rec := do(r, "POST", "/admin/products", adminTok,
+		`{"id":"m10","name":"M10","billing":"recurring","entitlements":{"a.members":{"value":10,"mode":"at_least"}}}`)
+	mustCode(t, rec, http.StatusCreated)
+	var vo ProductVO
+	_ = json.Unmarshal(rec.Body.Bytes(), &vo)
+	got, _ := vo.Entitlements["a.members"].(map[string]any)
+	if got["value"] != float64(10) || got["mode"] != "at_least" {
+		t.Errorf("entitlements = %+v", vo.Entitlements)
+	}
+	mustCode(t, do(r, "POST", "/admin/products", adminTok,
+		`{"id":"bad","name":"B","billing":"recurring","entitlements":{"a.members":{"value":10,"mode":"nope"}}}`), http.StatusBadRequest)
+}
+
+func TestCheckoutNoIncreaseIs409(t *testing.T) {
+	r, st := newRouter(t)
+	mustCode(t, do(r, "POST", "/admin/keys", adminTok, `{"key":"a.members","type":"limit"}`), http.StatusCreated)
+	adminProduct(t, r, `{"id":"m10","name":"M10","billing":"recurring","stripe_price_id":"price_m","entitlements":{"a.members":{"value":10,"mode":"at_least"}}}`)
+	st.AddGrant(models.Grant{UserID: "canonical-" + userTok, Key: "a.members", Value: 10, Mode: models.ModeAtLeast, Status: models.GrantActive})
+	rec := do(r, "POST", "/billing/checkout", userTok, `{"product_id":"m10"}`)
+	mustCode(t, rec, http.StatusConflict)
+	if !strings.Contains(rec.Body.String(), "no_increase") {
+		t.Errorf("body = %s", rec.Body)
+	}
+}
+
+func TestCheckoutInAPlanGroupSwitchesInsteadOfCreatingASession(t *testing.T) {
+	r, st := newRouter(t)
+	mustCode(t, do(r, "POST", "/admin/keys", adminTok, `{"key":"a.members","type":"limit"}`), http.StatusCreated)
+	for _, n := range []string{"10", "20"} {
+		adminProduct(t, r, `{"id":"m`+n+`","name":"M`+n+`","billing":"recurring","plan_group":"members","stripe_price_id":"price_`+n+
+			`","entitlements":{"a.members":{"value":`+n+`,"mode":"at_least"}}}`)
+	}
+	st.AddGrant(models.Grant{UserID: "canonical-" + userTok, Key: "a.members", Value: 10, Mode: models.ModeAtLeast, ProductID: "m10",
+		Source: models.SourceStripeSubscription, ExternalID: "sub_1", Status: models.GrantActive})
+
+	rec := do(r, "POST", "/billing/checkout", userTok, `{"product_id":"m20"}`)
+	mustCode(t, rec, http.StatusOK)
+	var vo SessionVO
+	_ = json.Unmarshal(rec.Body.Bytes(), &vo)
+	if !vo.Switched || vo.URL != "" {
+		t.Errorf("body = %s", rec.Body)
+	}
+	mustCode(t, do(r, "POST", "/billing/checkout", userTok, `{"product_id":"m20"}`), http.StatusConflict)
+
+	rec = do(r, "GET", "/admin/products", adminTok, "")
+	if !strings.Contains(rec.Body.String(), `"plan_group":"members"`) {
+		t.Errorf("plan_group missing from %s", rec.Body)
+	}
 }

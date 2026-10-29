@@ -27,9 +27,10 @@ whole batch. A batch with both or neither of `key`/`prefix` returns 400 `invalid
 
 ## Resolution
 
-`effective = max(default tier, active tier grants) + sum(active key-level grants)` for a limit
-key. A flag is on when its tier value is on or any key-level grant is active. Tiers are
-alternatives; purchased units (key-level grants) add, and each ends independently.
+`effective = max(default tier, tier grants, at_least grants) + sum(add grants)` for a limit key,
+then clamped to the key's maximum. A flag is on when its tier value is on or any key-level grant is
+active. Tiers and `at_least` grants are alternatives (the highest wins); purchased `add` units
+stack, and each ends independently.
 
 A limit key can carry a `max` (set through `/admin/keys`, absent means none). Every check clamps
 the effective value to it, so a user never sees more than the maximum. `catalog.CheckPurchase`
@@ -60,6 +61,20 @@ quantity (recurring) or repeat purchases (one-off), otherwise a user holds it on
 catalog data (`/admin/products`); checkout refuses a product with no Stripe price ID, an unknown
 key, or a quantity that would pass a key's maximum.
 
+An entitlement is `add` (a bare value, stacks per unit) or `at_least`
+(`{"value": 10, "mode": "at_least"}`, a floor; two products at 10 and 20 give 20, not 30, and the
+value ignores quantity). Checkout rejects with 409 `no_increase` a product whose `at_least`
+entitlements would not raise the user's current value; a bundle passes if any one raises it.
+
+A recurring product can name a `plan_group`. A user holds at most one active subscription per
+group: checking out another product in the group switches the existing Stripe subscription to the
+new price (Stripe prorates; `POST /billing/checkout` answers `{"switched": true}` and creates no
+session) and replaces that subscription's grants with the new product's. The check ignores the old
+plan, so a downgrade (20 to 10) is allowed and a plan that raises nothing is not. A price change
+made in the billing portal (`customer.subscription.updated`) does the same, matched by the price
+ID. This is enforced at checkout, not at the webhook, so two subscriptions created outside this
+flow are not merged.
+
 A purchase creates one key-level grant per entitlement, valued per-unit value x quantity and
 sharing the purchase's Stripe ID (payment intent, or subscription), so a refund, dispute, or
 cancel ends them together. A subscription quantity change (`customer.subscription.updated`)
@@ -83,8 +98,11 @@ go run ./cmd/seed-catalog -dry-run   # drop -dry-run to write
 
 The loader only creates what is missing; an existing row, or an already-set default tier, is left
 alone, so re-running cannot undo an edit or clear a Stripe price ID. Products ship with no
-`stripe_price_id` (checkout rejects them) until test-mode prices exist; set each with
-`PUT /admin/products/:id`. `-file` loads a different seed. Members-per-session tiers above 4 are
+`stripe_price_id` (checkout rejects them). Price IDs differ per Stripe environment, so they live in
+an overlay, `seed/prices.dev.json` (`{"products": {"<product id>": "<price id>"}}`; price IDs are opaque strings, not required to start with `price_`), applied with
+`-prices seed/prices.dev.json`. The overlay also works on products that already exist: it sets a
+price only where the product has none, leaves a different existing price alone (reported as
+skipped), and keeps every other field. `-file` loads a different seed. Members-per-session tiers above 4 are
 not seeded: their products are not defined yet.
 
 ## Billing

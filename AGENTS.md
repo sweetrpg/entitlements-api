@@ -53,7 +53,7 @@ go test -race ./...
 - **Checks:** `GET /check?key=` and `GET /check/batch` (repeated `key`, or `prefix`; exactly one).
   Both are GETs so consumers can cache them; an unknown key fails the whole batch with 404. Caps
   live in `constants` (`MaxBatchKeys`, `MaxPrefixLength`).
-- **Resolution:** tier values take the maximum; key-level grants add (limits) or turn a flag on.
+- **Resolution:** effective = max(default tier, tier grants, at_least grants) + sum(add grants), then clamped; a key-level flag grant turns a flag on.
   See `catalog/resolve.go`. A limit key's optional `max` clamps the result in `catalog/check.go`.
   Purchase checks use the unclamped value (`catalog.CheckPurchase`).
 - **Products:** a purchase makes one grant per entitlement sharing the Stripe object ID
@@ -61,6 +61,13 @@ go test -race ./...
   refs, so a bundle ends together. Grants are unique on (source, external_id, key).
 - **Seed:** `seed/initiative.json` is data loaded by `cmd/seed-catalog` through the admin API,
   create-only. Do not put catalog values in Go code.
+- **Plan groups:** `billing/service.go` `findPlanMember` finds the user's subscription in the
+  product's group; `replaceEntitlements` (`billing/webhook.go`) rewrites a subscription's grants
+  for a new product or quantity, from checkout and from `customer.subscription.updated`.
+- **Indexes:** MongoDB partial indexes accept only equality, `$exists: true`, range, `$type`, and
+  `$and` (not `$exists: false`). Live catalog rows carry `live: true` (removed on soft delete) and
+  the unique indexes filter on it; `EnsureIndexes` backfills the flag and a failure stops startup.
+  `data/indexes_test.go` checks every definition. The service also rejects duplicates itself.
 - **Audit:** catalog writes and their audit entry are not one transaction. A failed audit append
   is logged at ERROR and the write still succeeds.
 - **Delete strategy:** catalog keys and tiers are soft-deleted; the audit collection is

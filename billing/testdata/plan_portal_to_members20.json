@@ -1,0 +1,1 @@
+{"id":"evt_plan_portal20","object":"event","type":"customer.subscription.updated","data":{"object":{"id":"sub_m1","object":"subscription","status":"active","metadata":{"user_id":"user-6","product_id":"members-10"},"items":{"data":[{"quantity":1,"price":{"id":"price_members-20"}}]}}}}

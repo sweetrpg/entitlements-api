@@ -24,7 +24,10 @@ type MaxExceededVO struct {
 func writeError(c *gin.Context, err error) {
 	var unknown catalog.UnknownKeysError
 	var exceeded catalog.MaxExceededError
+	var noIncrease catalog.NoIncreaseError
 	switch {
+	case errors.As(err, &noIncrease):
+		c.JSON(http.StatusConflict, apiv.ErrorVO{Error: "no_increase", Message: err.Error()})
 	case errors.As(err, &exceeded):
 		c.JSON(http.StatusConflict, MaxExceededVO{Error: "exceeds_maximum", Message: err.Error(), Key: exceeded.Key, UnitsRemaining: exceeded.Remaining})
 	case errors.Is(err, models.ErrInvalid):

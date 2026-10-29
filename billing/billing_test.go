@@ -38,6 +38,7 @@ func loadEvent(t *testing.T, name string) Event {
 }
 
 type fakeGateway struct {
+	switched   SwitchParams
 	checkout   CheckoutParams
 	portalCust string
 	portalBack string
@@ -46,6 +47,11 @@ type fakeGateway struct {
 func (f *fakeGateway) CreateCheckout(_ context.Context, p CheckoutParams) (string, error) {
 	f.checkout = p
 	return "https://checkout.example/session", nil
+}
+
+func (f *fakeGateway) SwitchPlan(_ context.Context, p SwitchParams) error {
+	f.switched = p
+	return nil
 }
 
 func (f *fakeGateway) CreatePortal(_ context.Context, customerID, returnURL string) (string, error) {
@@ -322,9 +328,9 @@ func TestCheckoutRejectsUnmappedOrMissingTier(t *testing.T) {
 func TestCheckoutPassesUserTierPriceAndFixedURLs(t *testing.T) {
 	s, st, gw := setup(t)
 	seedTier(t, st, "plus", "price_plus")
-	url, err := s.Checkout(context.Background(), "user-1", "a@example.test", CheckoutRequest{TierID: "plus"})
-	if err != nil || url == "" {
-		t.Fatalf("url = %q err = %v", url, err)
+	res, err := s.Checkout(context.Background(), "user-1", "a@example.test", CheckoutRequest{TierID: "plus"})
+	if err != nil || res.URL == "" || res.Switched {
+		t.Fatalf("result = %+v err = %v", res, err)
 	}
 	want := CheckoutParams{PriceID: "price_plus", UserID: "user-1", TierID: "plus", Email: "a@example.test", SuccessURL: urls.CheckoutSuccess, CancelURL: urls.CheckoutCancel}
 	if gw.checkout.PriceID != want.PriceID || gw.checkout.UserID != want.UserID || gw.checkout.TierID != want.TierID ||

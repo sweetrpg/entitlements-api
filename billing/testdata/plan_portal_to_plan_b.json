@@ -1,0 +1,1 @@
+{"id":"evt_plan_keys","object":"event","type":"customer.subscription.updated","data":{"object":{"id":"sub_g1","object":"subscription","status":"active","metadata":{"user_id":"user-6","product_id":"plan-a"},"items":{"data":[{"quantity":1,"price":{"id":"price_plan-b"}}]}}}}

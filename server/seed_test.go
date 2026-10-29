@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/sweetrpg/entitlements-api/models"
@@ -34,7 +35,7 @@ func loadSeed(t *testing.T, r http.Handler) *seed.Report {
 func TestSeedLoadsThroughTheAdminAPI(t *testing.T) {
 	r, _ := newRouter(t)
 	rep := loadSeed(t, r)
-	if len(rep.Created) != 10+1+1+7 || len(rep.Existing) != 0 {
+	if len(rep.Created) != 10+1+1+9 || len(rep.Existing) != 0 {
 		t.Fatalf("report = %+v", rep)
 	}
 
@@ -65,7 +66,7 @@ func TestSeedLoadsThroughTheAdminAPI(t *testing.T) {
 
 	var products []ProductVO
 	_ = json.Unmarshal(do(r, "GET", "/admin/products", adminTok, "").Body.Bytes(), &products)
-	if len(products) != 7 {
+	if len(products) != 9 {
 		t.Errorf("products = %d", len(products))
 	}
 }
@@ -77,7 +78,7 @@ func TestSeedReloadChangesNothing(t *testing.T) {
 		`{"name":"Themes","billing":"one_off","stripe_price_id":"price_live","entitlements":{"initiative.customization":true}}`), http.StatusOK)
 
 	rep := loadSeed(t, r)
-	if len(rep.Created) != 0 || len(rep.Existing) != 10+1+1+7 {
+	if len(rep.Created) != 0 || len(rep.Existing) != 10+1+1+9 {
 		t.Fatalf("report = %+v", rep)
 	}
 	var products []ProductVO
@@ -101,5 +102,55 @@ func TestSeededSessionsAreCappedAtFive(t *testing.T) {
 	_ = json.Unmarshal(rec.Body.Bytes(), &vo)
 	if vo.Value != float64(5) {
 		t.Errorf("value = %v, want 5", vo.Value)
+	}
+}
+
+func TestDevPricesApplyThroughTheAdminAPIAndMakeProductsPurchasable(t *testing.T) {
+	r, _ := newRouter(t)
+	rep := loadSeed(t, r)
+	if len(rep.Created) == 0 {
+		t.Fatal("seed not loaded")
+	}
+	// Before prices, a seeded product cannot be bought.
+	mustCode(t, do(r, "POST", "/billing/checkout", userTok, `{"product_id":"encounters"}`), http.StatusBadRequest)
+
+	raw, err := os.ReadFile("../seed/prices.dev.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prices, err := seed.ParsePrices(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(r)
+	t.Cleanup(srv.Close)
+	client := &seed.Client{BaseURL: srv.URL, Token: adminTok}
+
+	first := &seed.Report{}
+	if err := client.ApplyPrices(context.Background(), prices, false, first); err != nil {
+		t.Fatal(err)
+	}
+	if len(first.Created) != 9 {
+		t.Fatalf("report = %+v", first)
+	}
+	again := &seed.Report{}
+	if err := client.ApplyPrices(context.Background(), prices, false, again); err != nil || len(again.Created) != 0 || len(again.Existing) != 9 {
+		t.Fatalf("second apply = %+v err = %v", again, err)
+	}
+
+	mustCode(t, do(r, "POST", "/billing/checkout", userTok, `{"product_id":"encounters"}`), http.StatusOK)
+	// members-10's price ID is a hand-set value without the price_ prefix; checkout treats it as opaque.
+	mustCode(t, do(r, "POST", "/billing/checkout", userTok, `{"product_id":"members-10"}`), http.StatusOK)
+
+	var products []ProductVO
+	_ = json.Unmarshal(do(r, "GET", "/admin/products", adminTok, "").Body.Bytes(), &products)
+	for _, p := range products {
+		if p.ID != "members-20" {
+			continue
+		}
+		got, _ := p.Entitlements["initiative.members_per_session"].(map[string]any)
+		if p.StripePriceID != "price_0UViDdpRY4hLTjk70PBkZT8r" || p.PlanGroup != "members" || got["mode"] != "at_least" {
+			t.Errorf("members-20 after pricing = %+v", p)
+		}
 	}
 }

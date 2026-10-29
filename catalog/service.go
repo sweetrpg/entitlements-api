@@ -87,6 +87,11 @@ func (s *Service) CreateKey(ctx context.Context, actor string, in KeyInput) (*mo
 	if err := models.ValidateMax(in.Type, in.Max); err != nil {
 		return nil, err
 	}
+	if existing, err := s.store.GetKeys(ctx, []string{in.Key}); err != nil {
+		return nil, err
+	} else if len(existing) > 0 {
+		return nil, ErrDuplicate
+	}
 	k := &models.Key{Key: in.Key, Type: in.Type, Description: in.Description, TTLSeconds: in.TTLSeconds, Max: in.Max}
 	if err := s.store.InsertKey(ctx, k, actor); err != nil {
 		return nil, err
@@ -180,6 +185,11 @@ func (s *Service) CreateTier(ctx context.Context, actor string, in TierInput) (*
 	t, err := s.tierFromInput(ctx, in)
 	if err != nil {
 		return nil, err
+	}
+	if existing, err := s.store.GetTiers(ctx, []string{t.Slug}); err != nil {
+		return nil, err
+	} else if len(existing) > 0 {
+		return nil, ErrDuplicate
 	}
 	if err := s.store.InsertTier(ctx, t, actor); err != nil {
 		return nil, err

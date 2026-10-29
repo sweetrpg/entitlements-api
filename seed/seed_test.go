@@ -3,8 +3,10 @@ package seed
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -38,8 +40,8 @@ func TestEmbeddedSeedIsConsistent(t *testing.T) {
 			t.Errorf("free tier names undeclared key %s", k)
 		}
 	}
-	if len(d.Products) != 7 {
-		t.Errorf("products = %d, want 7", len(d.Products))
+	if len(d.Products) != 9 {
+		t.Errorf("products = %d, want 9", len(d.Products))
 	}
 	for _, p := range d.Products {
 		if p.StripePriceID != "" {
@@ -188,5 +190,140 @@ func TestLoadReportsUnreachableServer(t *testing.T) {
 	srv.Close()
 	if _, err := (&Client{BaseURL: url, Token: "t"}).Load(context.Background(), tiny, false); err == nil {
 		t.Error("expected an error")
+	}
+}
+
+func TestMembersProductsShareAPlanGroup(t *testing.T) {
+	d, _ := Parse(Initiative)
+	groups := map[string]string{}
+	for _, p := range d.Products {
+		if p.PlanGroup != "" {
+			groups[p.ID] = p.PlanGroup
+			if p.Billing != "recurring" {
+				t.Errorf("%s is in a plan group but not recurring", p.ID)
+			}
+		}
+	}
+	if len(groups) != 2 || groups["members-10"] != "members" || groups["members-20"] != "members" {
+		t.Errorf("plan groups = %v", groups)
+	}
+}
+
+func TestDevPriceOverlayOnlyNamesSeededProducts(t *testing.T) {
+	raw, err := os.ReadFile("prices.dev.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := ParsePrices(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, _ := Parse(Initiative)
+	seeded := map[string]bool{}
+	for _, pr := range d.Products {
+		seeded[pr.ID] = true
+	}
+	for id := range p.Products {
+		if !seeded[id] {
+			t.Errorf("overlay prices unknown product %s", id)
+		}
+	}
+	if len(p.Products) != 9 {
+		t.Errorf("prices = %d, want 9", len(p.Products))
+	}
+	if p.Products["members-10"] != "members_10" {
+		t.Errorf("members-10 price = %q", p.Products["members-10"])
+	}
+}
+
+func TestParsePricesRejectsBadInput(t *testing.T) {
+	for name, in := range map[string]string{
+		"empty":         `{"products":{"a":""}}`,
+		"padded":        `{"products":{"a":" price_x"}}`,
+		"unknown field": `{"products":{},"extra":1}`,
+		"garbage":       `nope`,
+	} {
+		if _, err := ParsePrices([]byte(in)); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+}
+
+func liveProducts() string {
+	return `[{"id":"a","name":"A","billing":"recurring","entitlements":{"x.y":{"value":10,"mode":"at_least"}}},` +
+		`{"id":"b","name":"B","billing":"one_off","stripe_price_id":"price_old","entitlements":{"x.y":1}},` +
+		`{"id":"c","name":"C","billing":"one_off","stripe_price_id":"price_c","entitlements":{"x.y":1}}]`
+}
+
+func TestApplyPricesSetsOnlyMissingPricesAndKeepsTheRestOfTheProduct(t *testing.T) {
+	var put []byte
+	srv, rec := stub(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			_, _ = w.Write([]byte(liveProducts()))
+		case http.MethodPut:
+			put, _ = io.ReadAll(r.Body)
+			w.WriteHeader(http.StatusOK)
+		}
+	})
+	prices := &Prices{Products: map[string]string{"a": "price_a", "b": "price_new", "c": "price_c"}}
+	rep := &Report{}
+	if err := (&Client{BaseURL: srv.URL, Token: "t"}).ApplyPrices(context.Background(), prices, false, rep); err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Created) != 1 || rep.Created[0] != "price a" || len(rep.Existing) != 1 || len(rep.Skipped) != 1 {
+		t.Errorf("report = %+v", rep)
+	}
+	if got := strings.Join(rec.requests, ","); got != "GET /admin/products,PUT /admin/products/a" {
+		t.Errorf("requests = %s", got)
+	}
+	var sent map[string]any
+	_ = json.Unmarshal(put, &sent)
+	ents, _ := sent["entitlements"].(map[string]any)
+	if sent["stripe_price_id"] != "price_a" || sent["name"] != "A" || ents["x.y"] == nil {
+		t.Errorf("PUT body = %s", put)
+	}
+}
+
+func TestApplyPricesDryRunAndMissingProducts(t *testing.T) {
+	srv, rec := stub(t, func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(liveProducts())) })
+	c := &Client{BaseURL: srv.URL, Token: "t"}
+	rep := &Report{}
+	if err := c.ApplyPrices(context.Background(), &Prices{Products: map[string]string{"a": "price_a", "z": "price_z"}}, true, rep); err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Created) != 2 {
+		t.Errorf("report = %+v", rep)
+	}
+	for _, r := range rec.requests {
+		if strings.HasPrefix(r, "PUT") {
+			t.Errorf("dry run wrote: %s", r)
+		}
+	}
+	if err := c.ApplyPrices(context.Background(), &Prices{Products: map[string]string{"z": "price_z"}}, false, &Report{}); err == nil {
+		t.Error("a missing product was not an error")
+	}
+}
+
+func TestPriceIDsAreOpaque(t *testing.T) {
+	p, err := ParsePrices([]byte(`{"products":{"a":"members_10","b":"anything-goes.123"}}`))
+	if err != nil || p.Products["a"] != "members_10" {
+		t.Fatalf("prices = %+v err = %v", p, err)
+	}
+
+	var put []byte
+	srv, _ := stub(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(liveProducts()))
+			return
+		}
+		put, _ = io.ReadAll(r.Body)
+	})
+	rep := &Report{}
+	if err := (&Client{BaseURL: srv.URL, Token: "t"}).ApplyPrices(context.Background(), &Prices{Products: map[string]string{"a": "members_10"}}, false, rep); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(put), `"stripe_price_id":"members_10"`) || len(rep.Created) != 1 {
+		t.Errorf("PUT body = %s report = %+v", put, rep)
 	}
 }
