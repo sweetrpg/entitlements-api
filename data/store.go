@@ -50,6 +50,8 @@ type Store interface {
 	ListProducts(ctx context.Context, limit, skip int64) ([]models.Product, error)
 	UpdateProduct(ctx context.Context, p *models.Product, actor string) (*models.Product, error)
 	DeleteProduct(ctx context.Context, slug, actor string) error
+	// ProductByPriceID finds the live product sold at a Stripe price; ErrNotFound if none.
+	ProductByPriceID(ctx context.Context, priceID string) (*models.Product, error)
 
 	// GrantsByExternal returns every grant created from one Stripe object: a tier grant, or one
 	// key-level grant per entitlement of a product purchase.

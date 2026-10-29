@@ -190,3 +190,19 @@ func TestLoadReportsUnreachableServer(t *testing.T) {
 		t.Error("expected an error")
 	}
 }
+
+func TestMembersProductsShareAPlanGroup(t *testing.T) {
+	d, _ := Parse(Initiative)
+	groups := map[string]string{}
+	for _, p := range d.Products {
+		if p.PlanGroup != "" {
+			groups[p.ID] = p.PlanGroup
+			if p.Billing != "recurring" {
+				t.Errorf("%s is in a plan group but not recurring", p.ID)
+			}
+		}
+	}
+	if len(groups) != 2 || groups["members-10"] != "members" || groups["members-20"] != "members" {
+		t.Errorf("plan groups = %v", groups)
+	}
+}

@@ -17,6 +17,7 @@ type ProductVO struct {
 	Description   string         `json:"description"`
 	Billing       string         `json:"billing"`
 	Repeatable    bool           `json:"repeatable"`
+	PlanGroup     string         `json:"plan_group,omitempty"`
 	StripePriceID string         `json:"stripe_price_id,omitempty"`
 	Entitlements  map[string]any `json:"entitlements"`
 	mcore.Auditable
@@ -32,7 +33,7 @@ func toProductVO(p models.Product) ProductVO {
 		ents[e.Key] = models.FormatValue(e.Type, e.Value)
 	}
 	return ProductVO{
-		ID: p.Slug, Name: p.Name, Description: p.Description, Billing: p.Billing, Repeatable: p.Repeatable,
+		ID: p.Slug, Name: p.Name, Description: p.Description, Billing: p.Billing, Repeatable: p.Repeatable, PlanGroup: p.PlanGroup,
 		StripePriceID: p.StripePriceID, Entitlements: ents, Auditable: p.Auditable,
 	}
 }
@@ -43,6 +44,7 @@ type productBody struct {
 	Description   string         `json:"description"`
 	Billing       string         `json:"billing"`
 	Repeatable    bool           `json:"repeatable"`
+	PlanGroup     string         `json:"plan_group"`
 	StripePriceID string         `json:"stripe_price_id"`
 	Entitlements  map[string]any `json:"entitlements"`
 }
@@ -50,7 +52,7 @@ type productBody struct {
 func (b productBody) input(slug string) catalog.ProductInput {
 	return catalog.ProductInput{
 		Slug: slug, Name: b.Name, Description: b.Description, Billing: b.Billing,
-		Repeatable: b.Repeatable, StripePriceID: b.StripePriceID, Entitlements: b.Entitlements,
+		Repeatable: b.Repeatable, PlanGroup: b.PlanGroup, StripePriceID: b.StripePriceID, Entitlements: b.Entitlements,
 	}
 }
 

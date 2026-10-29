@@ -94,3 +94,26 @@ func TestProductDuplicateAndLifecycleAreAudited(t *testing.T) {
 		t.Errorf("product audit actions = %v, want create, update, delete", kinds)
 	}
 }
+
+func TestPlanGroupRules(t *testing.T) {
+	s, _ := newSvc(t)
+	seed(t, s)
+	in := productInput()
+	in.PlanGroup = "perks"
+	if _, err := s.CreateProduct(ctx, "admin", in); !errors.Is(err, models.ErrInvalid) {
+		t.Errorf("one_off in a group: err = %v, want invalid", err)
+	}
+	in.Billing, in.PlanGroup = models.BillingRecurring, "Not A Group"
+	if _, err := s.CreateProduct(ctx, "admin", in); !errors.Is(err, models.ErrInvalid) {
+		t.Errorf("bad group name: err = %v, want invalid", err)
+	}
+	in.PlanGroup = "perks"
+	p, err := s.CreateProduct(ctx, "admin", in)
+	if err != nil || p.PlanGroup != "perks" {
+		t.Fatalf("product = %+v err = %v", p, err)
+	}
+	in.PlanGroup = ""
+	if p, err = s.UpdateProduct(ctx, "admin", in); err != nil || p.PlanGroup != "" {
+		t.Errorf("clearing the group: %+v %v", p, err)
+	}
+}

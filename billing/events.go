@@ -85,8 +85,19 @@ type subscription struct {
 	Items    struct {
 		Data []struct {
 			Quantity int64 `json:"quantity"`
+			Price    struct {
+				ID string `json:"id"`
+			} `json:"price"`
 		} `json:"data"`
 	} `json:"items"`
+}
+
+// priceID is the first line item's Stripe price ID, "" if there is none.
+func (s subscription) priceID() string {
+	if len(s.Items.Data) == 0 {
+		return ""
+	}
+	return s.Items.Data[0].Price.ID
 }
 
 // quantity is the first line item's quantity, 0 if there is none.

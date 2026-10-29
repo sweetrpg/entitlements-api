@@ -66,6 +66,15 @@ An entitlement is `add` (a bare value, stacks per unit) or `at_least`
 value ignores quantity). Checkout rejects with 409 `no_increase` a product whose `at_least`
 entitlements would not raise the user's current value; a bundle passes if any one raises it.
 
+A recurring product can name a `plan_group`. A user holds at most one active subscription per
+group: checking out another product in the group switches the existing Stripe subscription to the
+new price (Stripe prorates; `POST /billing/checkout` answers `{"switched": true}` and creates no
+session) and replaces that subscription's grants with the new product's. The check ignores the old
+plan, so a downgrade (20 to 10) is allowed and a plan that raises nothing is not. A price change
+made in the billing portal (`customer.subscription.updated`) does the same, matched by the price
+ID. This is enforced at checkout, not at the webhook, so two subscriptions created outside this
+flow are not merged.
+
 A purchase creates one key-level grant per entitlement, valued per-unit value x quantity and
 sharing the purchase's Stripe ID (payment intent, or subscription), so a refund, dispute, or
 cancel ends them together. A subscription quantity change (`customer.subscription.updated`)

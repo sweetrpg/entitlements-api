@@ -7,6 +7,25 @@ import (
 	"github.com/sweetrpg/entitlements-api/models"
 )
 
+// PurchaseOption adjusts how a purchase is checked.
+type PurchaseOption func(*purchaseOptions)
+
+type purchaseOptions struct{ replacing string }
+
+// Replacing judges the purchase as if the grants of one Stripe object (a subscription being
+// switched to another plan) were gone.
+func Replacing(externalID string) PurchaseOption {
+	return func(o *purchaseOptions) { o.replacing = externalID }
+}
+
+func applyOptions(opts []PurchaseOption) purchaseOptions {
+	var o purchaseOptions
+	for _, f := range opts {
+		f(&o)
+	}
+	return o
+}
+
 // Units is a quantity of one limit key a purchase would add.
 type Units struct {
 	Key   string
@@ -28,7 +47,7 @@ func (e MaxExceededError) Error() string {
 // holding is the unclamped effective value (default tier, tier grants, and purchased units), so a
 // value already at or past the maximum leaves nothing to buy. Flags and keys without a maximum
 // always pass.
-func (s *Service) CheckPurchase(ctx context.Context, userID string, adds []Units) error {
+func (s *Service) CheckPurchase(ctx context.Context, userID string, adds []Units, opts ...PurchaseOption) error {
 	names := make([]string, len(adds))
 	for i, a := range adds {
 		names[i] = a.Key
@@ -38,7 +57,7 @@ func (s *Service) CheckPurchase(ctx context.Context, userID string, adds []Units
 	if err != nil {
 		return err
 	}
-	byName, values, err := s.rawValues(ctx, userID, names, keys)
+	byName, values, err := s.rawValuesWith(ctx, userID, names, keys, nil, applyOptions(opts).replacing)
 	if err != nil {
 		return err
 	}
@@ -69,7 +88,8 @@ func (e NoIncreaseError) Error() string {
 // CheckRaise refuses a purchase whose at_least entitlements would not raise the user's current
 // (clamped) value. A bundle passes when any of its at_least entitlements raises one; a product
 // with no at_least entitlement always passes.
-func (s *Service) CheckRaise(ctx context.Context, userID string, ents []models.ProductEntitlement) error {
+func (s *Service) CheckRaise(ctx context.Context, userID string, ents []models.ProductEntitlement, opts ...PurchaseOption) error {
+	replacing := applyOptions(opts).replacing
 	var atLeast []models.ProductEntitlement
 	var names []string
 	for _, e := range ents {
@@ -86,7 +106,7 @@ func (s *Service) CheckRaise(ctx context.Context, userID string, ents []models.P
 	if err != nil {
 		return err
 	}
-	byName, now, err := s.rawValues(ctx, userID, names, keys)
+	byName, now, err := s.rawValuesWith(ctx, userID, names, keys, nil, replacing)
 	if err != nil {
 		return err
 	}
@@ -94,7 +114,7 @@ func (s *Service) CheckRaise(ctx context.Context, userID string, ents []models.P
 	for i, e := range atLeast {
 		hypothetical[i] = models.Grant{UserID: userID, Key: e.Key, Value: e.Value, Mode: models.ModeAtLeast, Status: models.GrantActive}
 	}
-	_, projected, err := s.rawValuesWith(ctx, userID, names, keys, hypothetical)
+	_, projected, err := s.rawValuesWith(ctx, userID, names, keys, hypothetical, replacing)
 	if err != nil {
 		return err
 	}

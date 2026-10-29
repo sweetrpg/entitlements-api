@@ -33,9 +33,12 @@ func (s *MongoStore) EnsureIndexes(ctx context.Context) error {
 	liveOnly := options.Index().SetUnique(true).
 		SetPartialFilterExpression(bson.D{{Key: "deleted_at", Value: bson.D{{Key: "$exists", Value: false}}}})
 	idx := map[string][]mongo.IndexModel{
-		constants.KeysCollection:     {{Keys: bson.D{{Key: "key", Value: 1}}, Options: liveOnly}},
-		constants.TiersCollection:    {{Keys: bson.D{{Key: "slug", Value: 1}}, Options: liveOnly}},
-		constants.ProductsCollection: {{Keys: bson.D{{Key: "slug", Value: 1}}, Options: liveOnly}},
+		constants.KeysCollection:  {{Keys: bson.D{{Key: "key", Value: 1}}, Options: liveOnly}},
+		constants.TiersCollection: {{Keys: bson.D{{Key: "slug", Value: 1}}, Options: liveOnly}},
+		constants.ProductsCollection: {
+			{Keys: bson.D{{Key: "slug", Value: 1}}, Options: liveOnly},
+			{Keys: bson.D{{Key: "stripe_price_id", Value: 1}}},
+		},
 		constants.GrantsCollection: {
 			{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "status", Value: 1}}},
 			{Keys: bson.D{{Key: "source", Value: 1}, {Key: "external_id", Value: 1}, {Key: "key", Value: 1}}, Options: options.Index().SetUnique(true).
@@ -182,7 +185,7 @@ func (s *MongoStore) ListProducts(ctx context.Context, limit, skip int64) ([]mod
 func (s *MongoStore) UpdateProduct(ctx context.Context, p *models.Product, actor string) (*models.Product, error) {
 	set := bson.D{
 		{Key: "name", Value: p.Name}, {Key: "description", Value: p.Description},
-		{Key: "billing", Value: p.Billing}, {Key: "repeatable", Value: p.Repeatable},
+		{Key: "billing", Value: p.Billing}, {Key: "repeatable", Value: p.Repeatable}, {Key: "plan_group", Value: p.PlanGroup},
 		{Key: "stripe_price_id", Value: p.StripePriceID}, {Key: "entitlements", Value: p.Entitlements},
 		{Key: "updated_at", Value: time.Now().UTC()}, {Key: "updated_by", Value: actor},
 	}
@@ -191,6 +194,13 @@ func (s *MongoStore) UpdateProduct(ctx context.Context, p *models.Product, actor
 		FindOneAndUpdate(ctx, bson.D{notDeleted, {Key: "slug", Value: p.Slug}}, bson.D{{Key: "$set", Value: set}},
 			options.FindOneAndUpdate().SetReturnDocument(options.After)).Decode(&out)
 	return &out, mapNoDoc(err)
+}
+
+func (s *MongoStore) ProductByPriceID(ctx context.Context, priceID string) (*models.Product, error) {
+	var p models.Product
+	err := s.db.Collection(constants.ProductsCollection).
+		FindOne(ctx, bson.D{notDeleted, {Key: "stripe_price_id", Value: priceID}}).Decode(&p)
+	return &p, mapNoDoc(err)
 }
 
 func (s *MongoStore) DeleteProduct(ctx context.Context, slug, actor string) error {
