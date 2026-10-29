@@ -200,7 +200,8 @@ type Prices struct {
 	Products map[string]string `json:"products"`
 }
 
-// ParsePrices decodes an overlay, rejecting unknown fields and anything that is not a price ID.
+// ParsePrices decodes an overlay, rejecting unknown fields and empty prices. A price ID is an
+// opaque string: Stripe generates price_... values, but one can be set by hand (members_10).
 func ParsePrices(b []byte) (*Prices, error) {
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.DisallowUnknownFields()
@@ -209,8 +210,8 @@ func ParsePrices(b []byte) (*Prices, error) {
 		return nil, fmt.Errorf("prices: %w", err)
 	}
 	for id, price := range p.Products {
-		if !strings.HasPrefix(price, "price_") {
-			return nil, fmt.Errorf("prices: %s: %q is not a Stripe price ID", id, price)
+		if price == "" || strings.TrimSpace(price) != price {
+			return nil, fmt.Errorf("prices: %s: price ID must be a non-empty string without surrounding space", id)
 		}
 	}
 	return &p, nil
