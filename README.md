@@ -87,23 +87,20 @@ Upgrade note: grants are unique on `(source, external_id, key)`. `EnsureIndexes`
 ## Seed data
 
 `seed/initiative.json` holds the Initiative keys (types and maxima), the `free` default tier, and
-the products. It is data, reviewed by product, not code. Load it through the admin API with an
-administrator's token:
+the products; `seed/prices.dev.json` maps product IDs to Stripe test-mode price IDs (opaque
+strings; they differ per environment, so they stay out of the seed). Both are data, reviewed by
+product, not code. Load them with the CLI, as an administrator:
 
 ```bash
-ENTITLEMENTS_API_URL=https://dev.sweetrpg.com/api/1/entitlements \
-ENTITLEMENTS_ADMIN_TOKEN=... \
-go run ./cmd/seed-catalog -dry-run   # drop -dry-run to write
+sweetrpg entitlements seed --file seed/initiative.json --prices seed/prices.dev.json --dry-run
+sweetrpg entitlements seed --file seed/initiative.json --prices seed/prices.dev.json
 ```
 
-The loader only creates what is missing; an existing row, or an already-set default tier, is left
-alone, so re-running cannot undo an edit or clear a Stripe price ID. Products ship with no
-`stripe_price_id` (checkout rejects them). Price IDs differ per Stripe environment, so they live in
-an overlay, `seed/prices.dev.json` (`{"products": {"<product id>": "<price id>"}}`; price IDs are opaque strings, not required to start with `price_`), applied with
-`-prices seed/prices.dev.json`. The overlay also works on products that already exist: it sets a
-price only where the product has none, leaves a different existing price alone (reported as
-skipped), and keeps every other field. `-file` loads a different seed. Members-per-session tiers above 4 are
-not seeded: their products are not defined yet.
+The loader (`sweetrpg-cli`, `entitlements seed`) only creates what is missing: an existing row, or
+an already-set default tier, is left alone, so re-running cannot undo an edit. `--prices` sets a
+price only where a product has none and reports a different existing price as skipped. Products
+without a price are rejected at checkout. `server/seed_test.go` posts these files through the real
+admin routes. Members tiers above 4 come only from the Members 10 and Members 20 products.
 
 ## Billing
 
