@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 )
@@ -74,6 +75,8 @@ func Parse(b []byte) (*Doc, error) {
 type Report struct {
 	Created  []string
 	Existing []string
+	// Skipped rows were deliberately not changed.
+	Skipped []string
 }
 
 // Client talks to a running entitlements-api admin API.
@@ -189,4 +192,95 @@ func (c *Client) do(ctx context.Context, method, path string, body any) (int, []
 	defer func() { _ = resp.Body.Close() }()
 	out, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	return resp.StatusCode, out, err
+}
+
+// Prices is a per-environment overlay mapping product IDs to Stripe price IDs. Price IDs differ
+// between Stripe test and live mode, so they live outside the seed.
+type Prices struct {
+	Products map[string]string `json:"products"`
+}
+
+// ParsePrices decodes an overlay, rejecting unknown fields and anything that is not a price ID.
+func ParsePrices(b []byte) (*Prices, error) {
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.DisallowUnknownFields()
+	var p Prices
+	if err := dec.Decode(&p); err != nil {
+		return nil, fmt.Errorf("prices: %w", err)
+	}
+	for id, price := range p.Products {
+		if !strings.HasPrefix(price, "price_") {
+			return nil, fmt.Errorf("prices: %s: %q is not a Stripe price ID", id, price)
+		}
+	}
+	return &p, nil
+}
+
+// liveProduct is a product as the admin API returns it; Entitlements stays raw so it round-trips
+// exactly (including at_least objects).
+type liveProduct struct {
+	ID            string          `json:"id"`
+	Name          string          `json:"name"`
+	Description   string          `json:"description"`
+	Billing       string          `json:"billing"`
+	Repeatable    bool            `json:"repeatable"`
+	PlanGroup     string          `json:"plan_group,omitempty"`
+	StripePriceID string          `json:"stripe_price_id,omitempty"`
+	Entitlements  json.RawMessage `json:"entitlements"`
+}
+
+// ApplyPrices sets each overlay price on its product when the product has none. It works on
+// products that already exist, which Load never touches. A product that already has the same
+// price is reported as such; one with a different price is left alone and reported, since
+// replacing a live price is a deliberate act, not something a seed re-run should do.
+func (c *Client) ApplyPrices(ctx context.Context, p *Prices, dryRun bool, r *Report) error {
+	status, body, err := c.do(ctx, http.MethodGet, "/admin/products?limit=200", nil)
+	if err != nil || status != http.StatusOK {
+		return fmt.Errorf("prices: listing products: status %d err %v", status, err)
+	}
+	var live []liveProduct
+	if err := json.Unmarshal(body, &live); err != nil {
+		return fmt.Errorf("prices: %w", err)
+	}
+	byID := make(map[string]liveProduct, len(live))
+	for _, lp := range live {
+		byID[lp.ID] = lp
+	}
+	ids := make([]string, 0, len(p.Products))
+	for id := range p.Products {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	for _, id := range ids {
+		if err := c.applyPrice(ctx, r, byID, id, p.Products[id], dryRun); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Client) applyPrice(ctx context.Context, r *Report, byID map[string]liveProduct, id, price string, dryRun bool) error {
+	lp, ok := byID[id]
+	switch {
+	case !ok && dryRun:
+		r.Created = append(r.Created, "price "+id+" (product not created yet)")
+		return nil
+	case !ok:
+		return fmt.Errorf("prices: product %s does not exist; load the seed first", id)
+	case lp.StripePriceID == price:
+		r.Existing = append(r.Existing, "price "+id)
+		return nil
+	case lp.StripePriceID != "":
+		r.Skipped = append(r.Skipped, "price "+id+" (already set to a different price)")
+		return nil
+	}
+	if !dryRun {
+		lp.StripePriceID = price
+		status, resp, err := c.do(ctx, http.MethodPut, "/admin/products/"+id, lp)
+		if err != nil || status != http.StatusOK {
+			return fmt.Errorf("prices: %s: status %d: %s err %v", id, status, strings.TrimSpace(string(resp)), err)
+		}
+	}
+	r.Created = append(r.Created, "price "+id)
+	return nil
 }
