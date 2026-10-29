@@ -1,3 +1,13 @@
+## [0.4.1] - 2026-10-29
+
+### 🐛 Bug Fixes
+
+- *(kubernetes)* Set explicit rate-limit values in dev and local overlays
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Merge master into develop after v0.4.0
+- *(seed)* Drop the in-repo loader in favor of the CLI command
 ## [0.4.0] - 2026-10-29
 
 ### 🚀 Features
