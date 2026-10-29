@@ -1,3 +1,12 @@
+## [0.4.3] - 2026-10-29
+
+### 🐛 Bug Fixes
+
+- *(billing)* Stop sending a nil list to MongoDB on plan-group checkout
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Merge master into develop after v0.4.2
 ## [0.4.2] - 2026-10-29
 
 ### 🐛 Bug Fixes
