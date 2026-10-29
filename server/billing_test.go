@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -13,21 +14,32 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stripe/stripe-go/v87"
 	"github.com/stripe/stripe-go/v87/webhook"
+	apiv "github.com/sweetrpg/api-core.go/vo"
 	"github.com/sweetrpg/entitlements-api/billing"
 	"github.com/sweetrpg/entitlements-api/catalog"
 	"github.com/sweetrpg/entitlements-api/models"
 )
 
+// fakeStripeErr, when set by a test, is returned by every fake provider call.
+var fakeStripeErr error
+
 type fakeStripe struct{}
 
 func (fakeStripe) CreateCheckout(_ context.Context, p billing.CheckoutParams) (string, error) {
+	if fakeStripeErr != nil {
+		return "", fakeStripeErr
+	}
 	return "https://checkout.example/" + p.UserID + "/" + p.TierID + p.ProductID + "?email=" + p.Email, nil
 }
 
-func (fakeStripe) SwitchPlan(context.Context, billing.SwitchParams) error { return nil }
+func (fakeStripe) SwitchPlan(context.Context, billing.SwitchParams) error { return fakeStripeErr }
 
 func (fakeStripe) CreatePortal(_ context.Context, customerID, _ string) (string, error) {
+	if fakeStripeErr != nil {
+		return "", fakeStripeErr
+	}
 	return "https://portal.example/" + customerID, nil
 }
 
@@ -297,5 +309,31 @@ func TestCheckoutInAPlanGroupSwitchesInsteadOfCreatingASession(t *testing.T) {
 	rec = do(r, "GET", "/admin/products", adminTok, "")
 	if !strings.Contains(rec.Body.String(), `"plan_group":"members"`) {
 		t.Errorf("plan_group missing from %s", rec.Body)
+	}
+}
+
+func TestStripeFailureOnCheckoutIs502WithASafeMessage(t *testing.T) {
+	r, _ := newRouter(t)
+	mustCode(t, do(r, "POST", "/admin/keys", adminTok, `{"key":"a.members","type":"limit"}`), http.StatusCreated)
+	adminProduct(t, r, `{"id":"m10","name":"M10","billing":"recurring","stripe_price_id":"members_10","entitlements":{"a.members":{"value":10,"mode":"at_least"}}}`)
+	old := fakeStripeErr
+	fakeStripeErr = fmt.Errorf("retrieve price: %w", &stripe.Error{Code: stripe.ErrorCodeResourceMissing, Msg: "No such price: 'members_10'", RequestID: "req_zzz"})
+	t.Cleanup(func() { fakeStripeErr = old })
+
+	rec := do(r, "POST", "/billing/checkout", userTok, `{"product_id":"m10"}`)
+	mustCode(t, rec, http.StatusBadGateway)
+	var vo apiv.ErrorVO
+	_ = json.Unmarshal(rec.Body.Bytes(), &vo)
+	if vo.Error != "payment_provider_error" || vo.Message != "the product's price is not valid" {
+		t.Errorf("body = %s", rec.Body)
+	}
+	if strings.Contains(rec.Body.String(), "req_zzz") || strings.Contains(rec.Body.String(), "members_10") {
+		t.Errorf("body leaks provider details: %s", rec.Body)
+	}
+
+	fakeStripeErr = errors.New("dial tcp: timeout")
+	rec = do(r, "POST", "/billing/portal", userTok, ``)
+	if rec.Code != http.StatusNotFound { // no customer yet: the portal never reaches the provider
+		t.Errorf("portal without a customer = %d", rec.Code)
 	}
 }
