@@ -1,3 +1,12 @@
+## [0.5.2] - 2026-10-30
+
+### 🐛 Bug Fixes
+
+- *(data)* Tolerate an equivalent index that already exists
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Merge master into develop after v0.5.1
 ## [0.5.1] - 2026-10-30
 
 ### 🐛 Bug Fixes
