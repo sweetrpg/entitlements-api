@@ -1,4 +1,54 @@
 definitions:
+  billing.Quote:
+    properties:
+      action:
+        type: string
+      amount_due_now:
+        description: |-
+          AmountDueNow is what is charged when the user goes ahead: price x quantity for a checkout, the
+          prorated difference for an upgrade, and 0 for a downgrade.
+        type: integer
+      credit_on_next_invoice:
+        description: CreditOnNextInvoice is the credit a downgrade earns against the
+          next invoice.
+        type: integer
+      currency:
+        type: string
+      current_product:
+        $ref: '#/definitions/billing.QuoteProduct'
+      new_product:
+        $ref: '#/definitions/billing.QuoteProduct'
+      next_billing_date:
+        description: NextBillingDate is when the subscription renews next; empty for
+          a one-off purchase.
+        type: string
+      proration_date:
+        description: |-
+          ProrationDate pins the proration to the moment of the quote. Send it back with confirm so the
+          charge matches the figure shown; omit it and Stripe prorates at the time of the request.
+        type: integer
+      proration_lines:
+        items:
+          $ref: '#/definitions/billing.QuoteLine'
+        type: array
+      quantity:
+        type: integer
+    type: object
+  billing.QuoteLine:
+    properties:
+      amount:
+        description: minor units; negative is a credit
+        type: integer
+      description:
+        type: string
+    type: object
+  billing.QuoteProduct:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+    type: object
   models.KeyType:
     enum:
     - flag
@@ -23,6 +73,39 @@ definitions:
       type:
         $ref: '#/definitions/models.KeyType'
       value: {}
+    type: object
+  server.ConfirmationRequiredVO:
+    properties:
+      error:
+        type: string
+      message:
+        type: string
+      quote:
+        $ref: '#/definitions/billing.Quote'
+    type: object
+  server.SessionVO:
+    properties:
+      switched:
+        type: boolean
+      url:
+        type: string
+    type: object
+  server.checkoutBody:
+    properties:
+      confirm:
+        description: |-
+          Confirm is the user's go-ahead to switch their subscription to another plan in the same
+          group. Without it a switch is answered with 409 confirmation_required and the quote.
+        type: boolean
+      product_id:
+        type: string
+      proration_date:
+        description: ProrationDate is the proration_date from the quote being confirmed.
+        type: integer
+      quantity:
+        type: integer
+      tier_id:
+        type: string
     type: object
   vo.ErrorVO:
     properties:
@@ -68,6 +151,107 @@ info:
   title: Entitlements API service
   version: "1.0"
 paths:
+  /billing/checkout:
+    post:
+      consumes:
+      - application/json
+      description: 'Returns a Stripe-hosted checkout URL, or switches the caller''s
+        existing subscription in the product''s plan group. A switch needs confirm=true:
+        without it the response is 409 confirmation_required carrying a quote to show
+        the user; an upgrade is charged immediately and a failed payment is 402 payment_failed
+        with nothing changed.'
+      parameters:
+      - description: tier_id or product_id (+ quantity, confirm, proration_date)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.checkoutBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.SessionVO'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/vo.ErrorVO'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/vo.ErrorVO'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/server.ConfirmationRequiredVO'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/vo.ErrorVO'
+      summary: Start a checkout or switch a plan
+      tags:
+      - billing
+  /billing/portal:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.SessionVO'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/vo.ErrorVO'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/vo.ErrorVO'
+      summary: Open the billing portal
+      tags:
+      - billing
+  /billing/quote:
+    get:
+      description: What POST /billing/checkout would do and what it would cost, changing
+        nothing. action is checkout, switch, or none. Amounts are minor units (cents).
+        For a switch the figure comes from Stripe's invoice preview with the same
+        proration the real switch uses; send proration_date back with confirm so the
+        charge matches.
+      parameters:
+      - description: Product to buy or switch to
+        in: query
+        name: product_id
+        required: true
+        type: string
+      - description: Quantity (default 1)
+        in: query
+        name: quantity
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/billing.Quote'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/vo.ErrorVO'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/vo.ErrorVO'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/vo.ErrorVO'
+      summary: Quote a purchase or plan change
+      tags:
+      - billing
   /check:
     get:
       description: Effective value for one key for the verified caller. Cacheable

@@ -41,6 +41,9 @@ type fakeGateway struct {
 	err        error // returned by every call when set
 	switchErr  error // returned only by SwitchPlan
 	readErr    error // returned only by Price and Subscription
+	previewErr error
+	preview    Preview
+	previewed  []SwitchParams
 	prices     map[string]PriceInfo
 	subs       map[string]SubscriptionInfo
 	switched   SwitchParams
@@ -84,6 +87,18 @@ func (f *fakeGateway) Subscription(_ context.Context, id string) (SubscriptionIn
 	}
 	return SubscriptionInfo{ID: id, CustomerID: "cus_x", ItemID: "si_" + id, Quantity: 1,
 		Price: PriceInfo{ID: "price_old", UnitAmount: 1000, Currency: "usd", Interval: "month", IntervalCount: 1}}, nil
+}
+
+// PreviewSwitch records what it was asked and returns the configured preview.
+func (f *fakeGateway) PreviewSwitch(_ context.Context, p SwitchParams) (Preview, error) {
+	if f.err != nil {
+		return Preview{}, f.err
+	}
+	if f.previewErr != nil {
+		return Preview{}, f.previewErr
+	}
+	f.previewed = append(f.previewed, p)
+	return f.preview, nil
 }
 
 func (f *fakeGateway) SwitchPlan(_ context.Context, p SwitchParams) error {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -28,36 +29,109 @@ type checkoutBody struct {
 	TierID    string `json:"tier_id"`
 	ProductID string `json:"product_id"`
 	Quantity  int64  `json:"quantity"`
+	// Confirm is the user's go-ahead to switch their subscription to another plan in the same
+	// group. Without it a switch is answered with 409 confirmation_required and the quote.
+	Confirm bool `json:"confirm"`
+	// ProrationDate is the proration_date from the quote being confirmed.
+	ProrationDate int64 `json:"proration_date"`
+}
+
+// ConfirmationRequiredVO is the 409 body for a plan switch that needs the user's go-ahead: show
+// them Quote, then repeat the request with confirm=true (and the quote's proration_date).
+type ConfirmationRequiredVO struct {
+	Error   string         `json:"error"`
+	Message string         `json:"message"`
+	Quote   *billing.Quote `json:"quote"`
 }
 
 // setupBillingHandlers registers the user-facing billing routes. Like checks, they authenticate
 // with the end user's own bearer token, so a session is always created for the verified caller.
 func setupBillingHandlers(g *gin.Engine, svc *billing.Service, client *authz.Client) {
 	s := g.Group("/billing", authz.RequireAnyRole(client, constants.ServiceName, anyRole...))
+	s.POST("/checkout", checkoutHandler(svc))
+	s.GET("/quote", quoteHandler(svc))
+	s.POST("/portal", portalHandler(svc))
+}
 
-	s.POST("/checkout", func(c *gin.Context) {
+// checkoutHandler starts a purchase or switches a plan.
+//
+//	@Summary		Start a checkout or switch a plan
+//	@Description	Returns a Stripe-hosted checkout URL, or switches the caller's existing subscription in the product's plan group. A switch needs confirm=true: without it the response is 409 confirmation_required carrying a quote to show the user; an upgrade is charged immediately and a failed payment is 402 payment_failed with nothing changed.
+//	@Tags			billing
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		checkoutBody	true	"tier_id or product_id (+ quantity, confirm, proration_date)"
+//	@Success		200		{object}	SessionVO
+//	@Failure		400		{object}	vo.ErrorVO
+//	@Failure		402		{object}	vo.ErrorVO
+//	@Failure		409		{object}	ConfirmationRequiredVO
+//	@Failure		502		{object}	vo.ErrorVO
+//	@Router			/billing/checkout [post]
+func checkoutHandler(svc *billing.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		var b checkoutBody
 		if c.ShouldBindJSON(&b) != nil {
 			badRequest(c, "malformed JSON body")
 			return
 		}
-		res, err := svc.Checkout(c.Request.Context(), authz.Viewer(c), tokenEmail(authz.Token(c)),
-			billing.CheckoutRequest{TierID: b.TierID, ProductID: b.ProductID, Quantity: b.Quantity})
+		res, err := svc.Checkout(c.Request.Context(), authz.Viewer(c), tokenEmail(authz.Token(c)), billing.CheckoutRequest{
+			TierID: b.TierID, ProductID: b.ProductID, Quantity: b.Quantity, Confirm: b.Confirm, ProrationDate: b.ProrationDate,
+		})
 		if err != nil {
 			writeError(c, err)
 			return
 		}
 		c.JSON(http.StatusOK, SessionVO{URL: res.URL, Switched: res.Switched})
-	})
+	}
+}
 
-	s.POST("/portal", func(c *gin.Context) {
+// quoteHandler prices a purchase or plan change without changing anything.
+//
+//	@Summary		Quote a purchase or plan change
+//	@Description	What POST /billing/checkout would do and what it would cost, changing nothing. action is checkout, switch, or none. Amounts are minor units (cents). For a switch the figure comes from Stripe's invoice preview with the same proration the real switch uses; send proration_date back with confirm so the charge matches.
+//	@Tags			billing
+//	@Produce		json
+//	@Param			product_id	query		string	true	"Product to buy or switch to"
+//	@Param			quantity	query		int		false	"Quantity (default 1)"
+//	@Success		200			{object}	billing.Quote
+//	@Failure		400			{object}	vo.ErrorVO
+//	@Failure		409			{object}	vo.ErrorVO
+//	@Failure		502			{object}	vo.ErrorVO
+//	@Router			/billing/quote [get]
+func quoteHandler(svc *billing.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		qty, err := strconv.ParseInt(c.DefaultQuery("quantity", "1"), 10, 64)
+		if err != nil {
+			badRequest(c, "quantity must be an integer")
+			return
+		}
+		q, err := svc.Quote(c.Request.Context(), authz.Viewer(c), billing.CheckoutRequest{ProductID: c.Query("product_id"), Quantity: qty})
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, q)
+	}
+}
+
+// portalHandler opens the Stripe billing portal.
+//
+//	@Summary		Open the billing portal
+//	@Tags			billing
+//	@Produce		json
+//	@Success		200	{object}	SessionVO
+//	@Failure		404	{object}	vo.ErrorVO
+//	@Failure		502	{object}	vo.ErrorVO
+//	@Router			/billing/portal [post]
+func portalHandler(svc *billing.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		url, err := svc.Portal(c.Request.Context(), authz.Viewer(c))
 		if err != nil {
 			writeError(c, err)
 			return
 		}
 		c.JSON(http.StatusOK, SessionVO{URL: url})
-	})
+	}
 }
 
 // setupWebhookHandlers registers the public Stripe webhook. It sits outside the user-token

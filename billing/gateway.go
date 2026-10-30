@@ -33,6 +33,8 @@ type Gateway interface {
 	Price(ctx context.Context, priceID string) (PriceInfo, error)
 	// Subscription reads a subscription's line item, quantity, and period end.
 	Subscription(ctx context.Context, subscriptionID string) (SubscriptionInfo, error)
+	// PreviewSwitch asks Stripe what the switch in p would invoice, without changing anything.
+	PreviewSwitch(ctx context.Context, p SwitchParams) (Preview, error)
 	// SwitchPlan moves an existing subscription to another price instead of creating a second
 	// subscription, with the proration and payment behavior in p.
 	SwitchPlan(ctx context.Context, p SwitchParams) error
@@ -64,6 +66,21 @@ const (
 	// ProrateInvoiceNow invoices the proration immediately, so an upgrade is paid for now.
 	ProrateInvoiceNow = "always_invoice"
 )
+
+// Preview is Stripe's invoice preview for a proposed switch.
+type Preview struct {
+	Currency string
+	Lines    []PreviewLine
+}
+
+// PreviewLine is one line of a preview. Proration marks the lines created by the plan change
+// itself (the unused time on the old plan and the remaining time on the new), as opposed to the
+// renewal that would follow.
+type PreviewLine struct {
+	Description string
+	Amount      int64 // minor units; negative is a credit
+	Proration   bool
+}
 
 // SwitchParams is one subscription plan change.
 type SwitchParams struct {
@@ -168,6 +185,39 @@ func (g *StripeGateway) Subscription(ctx context.Context, subscriptionID string)
 		info.CustomerID = sub.Customer.ID
 	}
 	return info, nil
+}
+
+// PreviewSwitch previews the invoice the switch would produce with the same item change,
+// proration behavior, and proration date the real switch would use.
+func (g *StripeGateway) PreviewSwitch(ctx context.Context, p SwitchParams) (Preview, error) {
+	details := &stripe.InvoiceCreatePreviewSubscriptionDetailsParams{
+		Items: []*stripe.InvoiceCreatePreviewSubscriptionDetailsItemParams{{
+			ID: stripe.String(p.ItemID), Price: stripe.String(p.PriceID), Quantity: stripe.Int64(max(p.Quantity, 1)),
+		}},
+		ProrationBehavior: stripe.String(p.Proration),
+	}
+	if p.ProrationDate != 0 {
+		details.ProrationDate = stripe.Int64(p.ProrationDate)
+	}
+	inv, err := g.client.V1Invoices.CreatePreview(ctx, &stripe.InvoiceCreatePreviewParams{
+		Customer:            stripe.String(p.CustomerID),
+		Subscription:        stripe.String(p.SubscriptionID),
+		SubscriptionDetails: details,
+	})
+	if err != nil {
+		return Preview{}, fmt.Errorf("preview subscription change: %w", err)
+	}
+	out := Preview{Currency: string(inv.Currency)}
+	if inv.Lines != nil {
+		for _, l := range inv.Lines.Data {
+			pl := PreviewLine{Description: l.Description, Amount: l.Amount}
+			if l.Parent != nil && l.Parent.SubscriptionItemDetails != nil {
+				pl.Proration = l.Parent.SubscriptionItemDetails.Proration
+			}
+			out.Lines = append(out.Lines, pl)
+		}
+	}
+	return out, nil
 }
 
 // SwitchPlan replaces the subscription item's price, keeping its quantity, and records the new

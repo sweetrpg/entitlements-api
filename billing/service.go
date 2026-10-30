@@ -46,6 +46,11 @@ type CheckoutRequest struct {
 	TierID    string
 	ProductID string
 	Quantity  int64
+	// Confirm is the user's explicit go-ahead to switch an existing subscription to another plan.
+	// Without it a switch returns ConfirmationRequiredError and changes nothing.
+	Confirm bool
+	// ProrationDate, from a quote, pins the proration so the charge matches the figure shown.
+	ProrationDate int64
 }
 
 // CheckoutResult is either a Stripe-hosted checkout URL, or Switched when the user's existing
@@ -80,7 +85,7 @@ func (s *Service) Checkout(ctx context.Context, userID, email string, req Checko
 		return CheckoutResult{}, err
 	}
 	if sw != nil {
-		return s.switchPlan(ctx, userID, sw, params)
+		return s.confirmedSwitch(ctx, userID, sw, params, req)
 	}
 	if params.CustomerID, err = s.store.StripeCustomer(ctx, userID); err != nil {
 		return CheckoutResult{}, err
@@ -95,7 +100,28 @@ func (s *Service) Checkout(ctx context.Context, userID, email string, req Checko
 // planSwitch is the subscription a checkout would move to another product in its plan group.
 type planSwitch struct {
 	subscriptionID string
-	product        models.Product
+	current        models.Product // what the subscription is on now
+	product        models.Product // what it would move to
+}
+
+// maxProrationAge bounds a proration date taken from an earlier quote.
+const maxProrationAge = time.Hour
+
+// confirmedSwitch carries out a plan switch only once the user has confirmed it. Without
+// confirmation it returns the quote to show them, and nothing at Stripe is changed.
+func (s *Service) confirmedSwitch(ctx context.Context, userID string, sw *planSwitch, p CheckoutParams, req CheckoutRequest) (CheckoutResult, error) {
+	if !req.Confirm {
+		q, err := s.switchQuote(ctx, userID, sw, p.PriceID, p.Quantity, req.ProrationDate)
+		if err != nil {
+			return CheckoutResult{}, err
+		}
+		return CheckoutResult{}, &ConfirmationRequiredError{Quote: q}
+	}
+	now := time.Now()
+	if d := req.ProrationDate; d != 0 && (d > now.Unix() || time.Unix(d, 0).Before(now.Add(-maxProrationAge))) {
+		return CheckoutResult{}, fmt.Errorf("%w: proration_date must be a time from a recent quote", models.ErrInvalid)
+	}
+	return s.switchPlan(ctx, userID, sw, p, req.ProrationDate)
 }
 
 // switchPlan is a decided plan change: what to send Stripe and whether it is an upgrade.
@@ -138,11 +164,12 @@ func (s *Service) decideSwitch(ctx context.Context, userID string, sw *planSwitc
 // switchPlan changes the Stripe subscription and only then applies the new product's entitlements
 // to its grants; the customer.subscription.updated event that follows finds nothing to change. A
 // failed upgrade payment leaves both Stripe and the grants as they were.
-func (s *Service) switchPlan(ctx context.Context, userID string, sw *planSwitch, p CheckoutParams) (CheckoutResult, error) {
+func (s *Service) switchPlan(ctx context.Context, userID string, sw *planSwitch, p CheckoutParams, prorationDate int64) (CheckoutResult, error) {
 	d, err := s.decideSwitch(ctx, userID, sw, p.PriceID)
 	if err != nil {
 		return CheckoutResult{}, err
 	}
+	d.params.ProrationDate = prorationDate
 	if err := s.gw.SwitchPlan(ctx, d.params); err != nil {
 		perr := providerFailed("plan switch", err, "product", sw.product.Slug, "subscription", sw.subscriptionID,
 			"price_id", p.PriceID, "proration", d.params.Proration)
@@ -253,7 +280,7 @@ func (s *Service) findPlanMember(ctx context.Context, userID string, prod models
 		}
 		for _, g := range grants {
 			if g.Source == models.SourceStripeSubscription && g.ProductID == h.Slug {
-				return &planSwitch{subscriptionID: g.ExternalID}, nil
+				return &planSwitch{subscriptionID: g.ExternalID, current: h}, nil
 			}
 		}
 	}
