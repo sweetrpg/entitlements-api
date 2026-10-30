@@ -59,13 +59,13 @@
 				
 				<option value="file1">github.com/sweetrpg/entitlements-api/billing/gateway.go (0.0%)</option>
 				
-				<option value="file2">github.com/sweetrpg/entitlements-api/billing/provider.go (81.5%)</option>
+				<option value="file2">github.com/sweetrpg/entitlements-api/billing/provider.go (80.6%)</option>
 				
 				<option value="file3">github.com/sweetrpg/entitlements-api/billing/quote.go (88.9%)</option>
 				
 				<option value="file4">github.com/sweetrpg/entitlements-api/billing/service.go (89.6%)</option>
 				
-				<option value="file5">github.com/sweetrpg/entitlements-api/billing/webhook.go (85.4%)</option>
+				<option value="file5">github.com/sweetrpg/entitlements-api/billing/webhook.go (87.5%)</option>
 				
 				<option value="file6">github.com/sweetrpg/entitlements-api/catalog/check.go (88.0%)</option>
 				
@@ -167,41 +167,41 @@ type invoice struct {
 }
 
 // details returns the subscription link and metadata from whichever location carries it.
-func (i invoice) details() (subscription string, metadata map[string]string) <span class="cov9" title="13">{
+func (i invoice) details() (subscription string, metadata map[string]string) <span class="cov9" title="39">{
         candidates := []*subscriptionDetails{i.SubscriptionDetails}
         if i.Parent != nil </span><span class="cov1" title="1">{
                 candidates = append(candidates, i.Parent.SubscriptionDetails)
         }</span>
-        <span class="cov9" title="13">subscription = i.Subscription
-        for _, d := range candidates </span><span class="cov10" title="14">{
-                if d == nil </span><span class="cov3" title="2">{
+        <span class="cov9" title="39">subscription = i.Subscription
+        for _, d := range candidates </span><span class="cov10" title="40">{
+                if d == nil </span><span class="cov2" title="2">{
                         continue</span>
                 }
-                <span class="cov9" title="12">if subscription == "" </span><span class="cov1" title="1">{
+                <span class="cov9" title="38">if subscription == "" </span><span class="cov1" title="1">{
                         subscription = d.Subscription
                 }</span>
-                <span class="cov9" title="12">if metadata == nil </span><span class="cov9" title="12">{
+                <span class="cov9" title="38">if metadata == nil </span><span class="cov9" title="38">{
                         metadata = d.Metadata
                 }</span>
         }
-        <span class="cov9" title="13">return subscription, metadata</span>
+        <span class="cov9" title="39">return subscription, metadata</span>
 }
 
 // quantity is the first line's quantity, 1 if absent.
-func (i invoice) quantity() int64 <span class="cov9" title="12">{
-        if len(i.Lines.Data) &gt; 0 &amp;&amp; i.Lines.Data[0].Quantity &gt; 0 </span><span class="cov3" title="2">{
+func (i invoice) quantity() int64 <span class="cov9" title="38">{
+        if len(i.Lines.Data) &gt; 0 &amp;&amp; i.Lines.Data[0].Quantity &gt; 0 </span><span class="cov2" title="2">{
                 return i.Lines.Data[0].Quantity
         }</span>
-        <span class="cov8" title="10">return 1</span>
+        <span class="cov9" title="36">return 1</span>
 }
 
 // periodEnd is the latest period end across the invoice's lines, 0 if none.
-func (i invoice) periodEnd() int64 <span class="cov9" title="12">{
+func (i invoice) periodEnd() int64 <span class="cov9" title="38">{
         var end int64
-        for _, l := range i.Lines.Data </span><span class="cov9" title="13">{
+        for _, l := range i.Lines.Data </span><span class="cov9" title="39">{
                 end = max(end, l.Period.End)
         }</span>
-        <span class="cov9" title="12">return end</span>
+        <span class="cov9" title="38">return end</span>
 }
 
 type subscription struct {
@@ -219,19 +219,19 @@ type subscription struct {
 }
 
 // priceID is the first line item's Stripe price ID, "" if there is none.
-func (s subscription) priceID() string <span class="cov7" title="7">{
+func (s subscription) priceID() string <span class="cov5" title="7">{
         if len(s.Items.Data) == 0 </span><span class="cov0" title="0">{
                 return ""
         }</span>
-        <span class="cov7" title="7">return s.Items.Data[0].Price.ID</span>
+        <span class="cov5" title="7">return s.Items.Data[0].Price.ID</span>
 }
 
 // quantity is the first line item's quantity, 0 if there is none.
-func (s subscription) quantity() int64 <span class="cov8" title="8">{
+func (s subscription) quantity() int64 <span class="cov6" title="8">{
         if len(s.Items.Data) == 0 </span><span class="cov1" title="1">{
                 return 0
         }</span>
-        <span class="cov7" title="7">return s.Items.Data[0].Quantity</span>
+        <span class="cov5" title="7">return s.Items.Data[0].Quantity</span>
 }
 
 type charge struct {
@@ -283,6 +283,10 @@ type Gateway interface {
         Price(ctx context.Context, priceID string) (PriceInfo, error)
         // Subscription reads a subscription's line item, quantity, and period end.
         Subscription(ctx context.Context, subscriptionID string) (SubscriptionInfo, error)
+        // Invoice reads why an invoice was created (billing_reason).
+        Invoice(ctx context.Context, invoiceID string) (InvoiceInfo, error)
+        // CancelSubscription ends a subscription immediately: no further invoices, nothing refunded.
+        CancelSubscription(ctx context.Context, subscriptionID string) error
         // PreviewSwitch asks Stripe what the switch in p would invoice, without changing anything.
         PreviewSwitch(ctx context.Context, p SwitchParams) (Preview, error)
         // SwitchPlan moves an existing subscription to another price instead of creating a second
@@ -316,6 +320,14 @@ const (
         // ProrateInvoiceNow invoices the proration immediately, so an upgrade is paid for now.
         ProrateInvoiceNow = "always_invoice"
 )
+
+// InvoiceInfo is what a refund decision needs to know about an invoice.
+type InvoiceInfo struct {
+        ID string
+        // BillingReason is subscription_create or subscription_cycle for the plan's own payments, and
+        // subscription_update for a charge made by changing plan.
+        BillingReason string
+}
 
 // Preview is Stripe's invoice preview for a proposed switch.
 type Preview struct {
@@ -437,6 +449,27 @@ func (g *StripeGateway) Subscription(ctx context.Context, subscriptionID string)
         <span class="cov0" title="0">return info, nil</span>
 }
 
+// Invoice reads an invoice's billing reason.
+func (g *StripeGateway) Invoice(ctx context.Context, invoiceID string) (InvoiceInfo, error) <span class="cov0" title="0">{
+        inv, err := g.client.V1Invoices.Retrieve(ctx, invoiceID, nil)
+        if err != nil </span><span class="cov0" title="0">{
+                return InvoiceInfo{}, fmt.Errorf("retrieve invoice: %w", err)
+        }</span>
+        <span class="cov0" title="0">return InvoiceInfo{ID: inv.ID, BillingReason: string(inv.BillingReason)}, nil</span>
+}
+
+// CancelSubscription cancels now without a final invoice or proration refund; the refund that
+// prompted it is left exactly as it is.
+func (g *StripeGateway) CancelSubscription(ctx context.Context, subscriptionID string) error <span class="cov0" title="0">{
+        _, err := g.client.V1Subscriptions.Cancel(ctx, subscriptionID, &amp;stripe.SubscriptionCancelParams{
+                InvoiceNow: stripe.Bool(false), Prorate: stripe.Bool(false),
+        })
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("cancel subscription: %w", err)
+        }</span>
+        <span class="cov0" title="0">return nil</span>
+}
+
 // PreviewSwitch previews the invoice the switch would produce with the same item change,
 // proration behavior, and proration date the real switch would use.
 func (g *StripeGateway) PreviewSwitch(ctx context.Context, p SwitchParams) (Preview, error) <span class="cov0" title="0">{
@@ -532,15 +565,15 @@ type ProviderError struct {
         cause     error
 }
 
-func newProviderError(op string, err error) *ProviderError <span class="cov10" title="17">{
+func newProviderError(op string, err error) *ProviderError <span class="cov10" title="19">{
         pe := &amp;ProviderError{Op: op, cause: err}
         var se *stripe.Error
-        if errors.As(err, &amp;se) </span><span class="cov8" title="12">{
+        if errors.As(err, &amp;se) </span><span class="cov8" title="13">{
                 pe.API = true
                 pe.Type, pe.Code, pe.Param = string(se.Type), string(se.Code), se.Param
                 pe.Message, pe.RequestID, pe.Status = se.Msg, se.RequestID, se.HTTPStatusCode
         }</span>
-        <span class="cov10" title="17">return pe</span>
+        <span class="cov10" title="19">return pe</span>
 }
 
 func (e *ProviderError) Error() string <span class="cov0" title="0">{
@@ -568,15 +601,15 @@ func (e *ProviderError) PublicMessage() string <span class="cov7" title="8">{
 
 // providerFailed logs why a provider call failed, with the caller's identifiers, and returns the
 // typed error. Only chosen fields are logged: never the key, the secret, or Stripe's full error.
-func providerFailed(op string, err error, fields ...any) error <span class="cov8" title="10">{
+func providerFailed(op string, err error, fields ...any) error <span class="cov8" title="12">{
         pe := newProviderError(op, err)
         args := append([]any{"op", op}, fields...)
         args = append(args, "stripe_type", pe.Type, "stripe_code", pe.Code, "stripe_param", pe.Param,
                 "stripe_status", pe.Status, "stripe_request_id", pe.RequestID, "stripe_message", pe.Message)
-        if !pe.API </span><span class="cov4" title="3">{
+        if !pe.API </span><span class="cov5" title="4">{
                 args = append(args, "cause", err.Error())
         }</span>
-        <span class="cov8" title="10">logging.Logger.Error("payment provider call failed", args...)
+        <span class="cov8" title="12">logging.Logger.Error("payment provider call failed", args...)
         return pe</span>
 }
 
@@ -613,6 +646,17 @@ func (e *PaymentFailedError) Unwrap() error <span class="cov1" title="1">{ retur
 func (e *PaymentFailedError) PublicMessage() string <span class="cov1" title="1">{
         return "the payment could not be completed, so the plan was not changed"
 }</span>
+
+// alreadyCanceled reports whether a cancel failed only because the subscription is already gone
+// or already canceled, which is the state the cancel was after.
+func alreadyCanceled(err error) bool <span class="cov4" title="3">{
+        var se *stripe.Error
+        if !errors.As(err, &amp;se) </span><span class="cov0" title="0">{
+                return false
+        }</span>
+        <span class="cov4" title="3">return se.Code == stripe.ErrorCodeResourceMissing ||
+                (se.Type == stripe.ErrorTypeInvalidRequest &amp;&amp; strings.Contains(strings.ToLower(se.Msg), "canceled subscription"))</span>
+}
 </pre>
 		
 		<pre class="file" id="file3" style="display: none">package billing
@@ -830,7 +874,7 @@ type Service struct {
 }
 
 // New returns a Service.
-func New(store data.Store, gw Gateway, limits Limits, urls URLs) *Service <span class="cov10" title="79">{
+func New(store data.Store, gw Gateway, limits Limits, urls URLs) *Service <span class="cov10" title="95">{
         return &amp;Service{store: store, gw: gw, limits: limits, urls: urls}
 }</span>
 
@@ -861,11 +905,11 @@ type CheckoutResult struct {
 // recurring product in a plan group the user already subscribes to switches that subscription
 // to the new price (Stripe prorates) and returns Switched, creating no second subscription.
 // email may be empty.
-func (s *Service) Checkout(ctx context.Context, userID, email string, req CheckoutRequest) (CheckoutResult, error) <span class="cov9" title="52">{
+func (s *Service) Checkout(ctx context.Context, userID, email string, req CheckoutRequest) (CheckoutResult, error) <span class="cov8" title="52">{
         if (req.TierID == "") == (req.ProductID == "") </span><span class="cov2" title="2">{
                 return CheckoutResult{}, fmt.Errorf("%w: provide either tier_id or product_id", models.ErrInvalid)
         }</span>
-        <span class="cov9" title="50">params := CheckoutParams{UserID: userID, Email: email, SuccessURL: s.urls.CheckoutSuccess, CancelURL: s.urls.CheckoutCancel}
+        <span class="cov8" title="50">params := CheckoutParams{UserID: userID, Email: email, SuccessURL: s.urls.CheckoutSuccess, CancelURL: s.urls.CheckoutCancel}
         var (
                 err error
                 sw  *planSwitch
@@ -875,10 +919,10 @@ func (s *Service) Checkout(ctx context.Context, userID, email string, req Checko
         }</span> else<span class="cov8" title="46"> {
                 sw, err = s.productParams(ctx, userID, req, &amp;params)
         }</span>
-        <span class="cov9" title="50">if err != nil </span><span class="cov6" title="14">{
+        <span class="cov8" title="50">if err != nil </span><span class="cov6" title="14">{
                 return CheckoutResult{}, err
         }</span>
-        <span class="cov8" title="36">if sw != nil </span><span class="cov7" title="20">{
+        <span class="cov8" title="36">if sw != nil </span><span class="cov6" title="20">{
                 return s.confirmedSwitch(ctx, userID, sw, params, req)
         }</span>
         <span class="cov6" title="16">if params.CustomerID, err = s.store.StripeCustomer(ctx, userID); err != nil </span><span class="cov0" title="0">{
@@ -903,7 +947,7 @@ const maxProrationAge = time.Hour
 
 // confirmedSwitch carries out a plan switch only once the user has confirmed it. Without
 // confirmation it returns the quote to show them, and nothing at Stripe is changed.
-func (s *Service) confirmedSwitch(ctx context.Context, userID string, sw *planSwitch, p CheckoutParams, req CheckoutRequest) (CheckoutResult, error) <span class="cov7" title="20">{
+func (s *Service) confirmedSwitch(ctx context.Context, userID string, sw *planSwitch, p CheckoutParams, req CheckoutRequest) (CheckoutResult, error) <span class="cov6" title="20">{
         if !req.Confirm </span><span class="cov2" title="2">{
                 q, err := s.switchQuote(ctx, userID, sw, p.PriceID, p.Quantity, req.ProrationDate)
                 if err != nil </span><span class="cov0" title="0">{
@@ -936,11 +980,11 @@ func (s *Service) decideSwitch(ctx context.Context, userID string, sw *planSwitc
         if err != nil </span><span class="cov2" title="2">{
                 return nil, providerFailed("plan switch", err, ids...)
         }</span>
-        <span class="cov7" title="19">price, err := s.gw.Price(ctx, priceID)
+        <span class="cov6" title="19">price, err := s.gw.Price(ctx, priceID)
         if err != nil </span><span class="cov0" title="0">{
                 return nil, providerFailed("plan switch", err, ids...)
         }</span>
-        <span class="cov7" title="19">if !strings.EqualFold(sub.Price.Currency, price.Currency) </span><span class="cov1" title="1">{
+        <span class="cov6" title="19">if !strings.EqualFold(sub.Price.Currency, price.Currency) </span><span class="cov1" title="1">{
                 return nil, fmt.Errorf("%w: the plans are billed in different currencies", models.ErrInvalid)
         }</span>
         <span class="cov6" title="18">qty := max(sub.Quantity, 1)
@@ -991,22 +1035,22 @@ func (s *Service) tierParams(ctx context.Context, tierID string, p *CheckoutPara
         return nil</span>
 }
 
-func (s *Service) productParams(ctx context.Context, userID string, req CheckoutRequest, p *CheckoutParams) (*planSwitch, error) <span class="cov9" title="54">{
+func (s *Service) productParams(ctx context.Context, userID string, req CheckoutRequest, p *CheckoutParams) (*planSwitch, error) <span class="cov8" title="54">{
         qty := req.Quantity
         if qty == 0 </span><span class="cov8" title="45">{
                 qty = 1
         }</span>
-        <span class="cov9" title="54">if qty &lt; 1 || qty &gt; constants.MaxPurchaseQuantity </span><span class="cov2" title="2">{
+        <span class="cov8" title="54">if qty &lt; 1 || qty &gt; constants.MaxPurchaseQuantity </span><span class="cov2" title="2">{
                 return nil, fmt.Errorf("%w: quantity must be between 1 and %d", models.ErrInvalid, constants.MaxPurchaseQuantity)
         }</span>
-        <span class="cov9" title="52">products, err := s.store.GetProducts(ctx, []string{req.ProductID})
+        <span class="cov8" title="52">products, err := s.store.GetProducts(ctx, []string{req.ProductID})
         if err != nil </span><span class="cov0" title="0">{
                 return nil, err
         }</span>
-        <span class="cov9" title="52">if len(products) == 0 || products[0].StripePriceID == "" </span><span class="cov3" title="3">{
+        <span class="cov8" title="52">if len(products) == 0 || products[0].StripePriceID == "" </span><span class="cov3" title="3">{
                 return nil, fmt.Errorf("%w: product is not available for purchase", models.ErrInvalid)
         }</span>
-        <span class="cov9" title="49">prod := products[0]
+        <span class="cov8" title="49">prod := products[0]
         if !prod.Repeatable </span><span class="cov8" title="40">{
                 if qty != 1 </span><span class="cov1" title="1">{
                         return nil, fmt.Errorf("%w: this product cannot be bought with a quantity", models.ErrInvalid)
@@ -1024,8 +1068,8 @@ func (s *Service) productParams(ctx context.Context, userID string, req Checkout
                 opts = append(opts, catalog.Replacing(sw.subscriptionID))
         }</span>
         <span class="cov8" title="45">adds := make([]catalog.Units, 0, len(prod.Entitlements))
-        for _, e := range prod.Entitlements </span><span class="cov9" title="51">{
-                if e.Type == models.TypeLimit &amp;&amp; !e.IsAtLeast() </span><span class="cov6" title="12">{
+        for _, e := range prod.Entitlements </span><span class="cov8" title="51">{
+                if e.Type == models.TypeLimit &amp;&amp; !e.IsAtLeast() </span><span class="cov5" title="12">{
                         adds = append(adds, catalog.Units{Key: e.Key, Units: e.Value * qty})
                 }</span>
         }
@@ -1126,6 +1170,7 @@ import (
         "strconv"
         "time"
 
+        "github.com/stripe/stripe-go/v87"
         "github.com/sweetrpg/common.go/logging"
         "github.com/sweetrpg/entitlements-api/catalog"
         "github.com/sweetrpg/entitlements-api/data"
@@ -1145,24 +1190,24 @@ type Event struct {
 // over: an event ID already recorded is skipped, and every handler converges on the same grant
 // state when replayed (the ID is recorded only after the handler succeeds, so a failed event is
 // retried). Event types the service does not act on are ignored without being recorded.
-func (s *Service) HandleEvent(ctx context.Context, ev Event) error <span class="cov9" title="94">{
+func (s *Service) HandleEvent(ctx context.Context, ev Event) error <span class="cov9" title="157">{
         handle, ok := s.handlers()[ev.Type]
         if !ok </span><span class="cov1" title="1">{
                 return nil
         }</span>
-        <span class="cov9" title="93">done, err := s.store.EventProcessed(ctx, ev.ID)
-        if err != nil || done </span><span class="cov2" title="2">{
+        <span class="cov9" title="156">done, err := s.store.EventProcessed(ctx, ev.ID)
+        if err != nil || done </span><span class="cov2" title="3">{
                 return err
         }</span>
-        <span class="cov9" title="91">if err := handle(ctx, ev.Object); err != nil </span><span class="cov1" title="1">{
+        <span class="cov9" title="153">if err := handle(ctx, ev.Object); err != nil </span><span class="cov2" title="3">{
                 return err
         }</span>
-        <span class="cov9" title="90">return s.store.RecordEvent(ctx, ev.ID, ev.Type, time.Now().UTC())</span>
+        <span class="cov9" title="150">return s.store.RecordEvent(ctx, ev.ID, ev.Type, time.Now().UTC())</span>
 }
 
 type handlerFunc func(ctx context.Context, object json.RawMessage) error
 
-func (s *Service) handlers() map[string]handlerFunc <span class="cov9" title="94">{
+func (s *Service) handlers() map[string]handlerFunc <span class="cov9" title="157">{
         return map[string]handlerFunc{
                 "checkout.session.completed":               s.onCheckout,
                 "checkout.session.async_payment_succeeded": s.onCheckout,
@@ -1187,79 +1232,79 @@ type purchase struct {
         refs       []string
 }
 
-func (s *Service) onCheckout(ctx context.Context, raw json.RawMessage) error <span class="cov8" title="59">{
+func (s *Service) onCheckout(ctx context.Context, raw json.RawMessage) error <span class="cov8" title="75">{
         var cs checkoutSession
         if err := json.Unmarshal(raw, &amp;cs); err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov8" title="59">if cs.PaymentStatus != "paid" &amp;&amp; cs.PaymentStatus != "no_payment_required" </span><span class="cov1" title="1">{
+        <span class="cov8" title="75">if cs.PaymentStatus != "paid" &amp;&amp; cs.PaymentStatus != "no_payment_required" </span><span class="cov1" title="1">{
                 return nil // async payment pending; async_payment_succeeded follows
         }</span>
-        <span class="cov8" title="58">user := cs.Metadata["user_id"]
+        <span class="cov7" title="74">user := cs.Metadata["user_id"]
         if user == "" </span><span class="cov1" title="1">{
                 user = cs.ClientReferenceID
         }</span>
-        <span class="cov8" title="58">if user == "" </span><span class="cov1" title="1">{
+        <span class="cov7" title="74">if user == "" </span><span class="cov1" title="1">{
                 logging.Logger.Warn("stripe checkout session has no user, ignoring", "session", cs.ID)
                 return nil
         }</span>
-        <span class="cov8" title="57">if cs.Customer != "" </span><span class="cov8" title="56">{
+        <span class="cov7" title="73">if cs.Customer != "" </span><span class="cov7" title="72">{
                 if err := s.store.SaveStripeCustomer(ctx, user, cs.Customer, systemActor); err != nil </span><span class="cov0" title="0">{
                         return err
                 }</span>
         }
-        <span class="cov8" title="57">qty, _ := strconv.ParseInt(cs.Metadata["quantity"], 10, 64)
+        <span class="cov7" title="73">qty, _ := strconv.ParseInt(cs.Metadata["quantity"], 10, 64)
         p := purchase{
                 userID: user, tierID: cs.Metadata["tier_id"], productID: cs.Metadata["product_id"],
                 quantity: max(qty, 1), refs: nonEmpty(cs.ID),
         }
         switch cs.Mode </span>{
-        case "subscription":<span class="cov8" title="45">
+        case "subscription":<span class="cov7" title="59">
                 p.source, p.externalID = models.SourceStripeSubscription, cs.Subscription</span>
-        case "payment":<span class="cov5" title="12">
+        case "payment":<span class="cov5" title="14">
                 p.source, p.externalID = models.SourceStripePurchase, cs.PaymentIntent</span>
         default:<span class="cov0" title="0">
                 return nil</span>
         }
-        <span class="cov8" title="57">if p.externalID == "" </span><span class="cov0" title="0">{
+        <span class="cov7" title="73">if p.externalID == "" </span><span class="cov0" title="0">{
                 return nil
         }</span>
-        <span class="cov8" title="57">return s.applyPurchase(ctx, p)</span>
+        <span class="cov7" title="73">return s.applyPurchase(ctx, p)</span>
 }
 
-func (s *Service) onInvoicePaid(ctx context.Context, raw json.RawMessage) error <span class="cov5" title="13">{
+func (s *Service) onInvoicePaid(ctx context.Context, raw json.RawMessage) error <span class="cov6" title="39">{
         var inv invoice
         if err := json.Unmarshal(raw, &amp;inv); err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov5" title="13">sub, meta := inv.details()
+        <span class="cov6" title="39">sub, meta := inv.details()
         if sub == "" </span><span class="cov1" title="1">{
                 return nil // not a subscription invoice
         }</span>
-        <span class="cov5" title="12">p := purchase{
+        <span class="cov6" title="38">p := purchase{
                 source: models.SourceStripeSubscription, externalID: sub,
                 userID: meta["user_id"], tierID: meta["tier_id"], productID: meta["product_id"],
                 quantity: inv.quantity(), refs: nonEmpty(inv.ID, inv.PaymentIntent, inv.Charge),
         }
-        if end := inv.periodEnd(); end &gt; 0 </span><span class="cov5" title="12">{
+        if end := inv.periodEnd(); end &gt; 0 </span><span class="cov6" title="38">{
                 t := time.Unix(end, 0).UTC()
                 p.validUntil = &amp;t
         }</span>
-        <span class="cov5" title="12">return s.applyPurchase(ctx, p)</span>
+        <span class="cov6" title="38">return s.applyPurchase(ctx, p)</span>
 }
 
 // onSubscriptionUpdated ends the grants when Stripe gives up on a subscription, and follows a
 // quantity change. past_due is left active: Stripe is still retrying the payment.
-func (s *Service) onSubscriptionUpdated(ctx context.Context, raw json.RawMessage) error <span class="cov5" title="9">{
+func (s *Service) onSubscriptionUpdated(ctx context.Context, raw json.RawMessage) error <span class="cov4" title="9">{
         var sub subscription
         if err := json.Unmarshal(raw, &amp;sub); err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov5" title="9">switch sub.Status </span>{
+        <span class="cov4" title="9">switch sub.Status </span>{
         case "unpaid", "canceled", "incomplete_expired":<span class="cov1" title="1">
                 return s.endGrants(ctx, models.SourceStripeSubscription, sub.ID)</span>
         }
-        <span class="cov5" title="8">return s.followSubscription(ctx, sub)</span>
+        <span class="cov4" title="8">return s.followSubscription(ctx, sub)</span>
 }
 
 func (s *Service) onSubscriptionDeleted(ctx context.Context, raw json.RawMessage) error <span class="cov3" title="4">{
@@ -1270,52 +1315,175 @@ func (s *Service) onSubscriptionDeleted(ctx context.Context, raw json.RawMessage
         <span class="cov3" title="4">return s.endGrants(ctx, models.SourceStripeSubscription, sub.ID)</span>
 }
 
-// onChargeRefunded revokes only on a full refund; a partial refund leaves the grants alone.
-func (s *Service) onChargeRefunded(ctx context.Context, raw json.RawMessage) error <span class="cov4" title="5">{
+// onChargeRefunded acts only on a full refund; a partial refund leaves everything alone.
+func (s *Service) onChargeRefunded(ctx context.Context, raw json.RawMessage) error <span class="cov5" title="21">{
         var ch charge
         if err := json.Unmarshal(raw, &amp;ch); err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov4" title="5">if !ch.Refunded </span><span class="cov1" title="1">{
+        <span class="cov5" title="21">if !ch.Refunded </span><span class="cov2" title="2">{
                 return nil
         }</span>
-        <span class="cov3" title="4">return s.revoke(ctx, ch.ID, ch.PaymentIntent, ch.Invoice)</span>
+        <span class="cov5" title="19">return s.settleReversal(ctx, "refund", ch.Invoice, ch.ID, ch.PaymentIntent, ch.Invoice)</span>
 }
 
-func (s *Service) onDispute(ctx context.Context, raw json.RawMessage) error <span class="cov1" title="1">{
+// onDispute always revokes, and cancels a subscription, whatever the disputed charge was for.
+func (s *Service) onDispute(ctx context.Context, raw json.RawMessage) error <span class="cov3" title="5">{
         var d dispute
         if err := json.Unmarshal(raw, &amp;d); err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov1" title="1">return s.revoke(ctx, d.Charge, d.PaymentIntent)</span>
+        <span class="cov3" title="5">return s.settleReversal(ctx, "dispute", "", d.Charge, d.PaymentIntent)</span>
+}
+
+// settleReversal revokes the grants a refund or dispute names. A one-off purchase is only revoked.
+// For a subscription it also cancels the Stripe subscription, so a customer who got their money
+// back is not billed again. A refund counts only when it is for the plan's own payment (its
+// creation or a renewal); a refund of a plan-change charge is treated like a partial refund and
+// changes nothing. refs are the Stripe object IDs the event names; invoiceID is the refunded
+// charge's invoice, used only for refunds.
+//
+// Revoking comes first so the entitlement goes at once; the cancel that follows is idempotent
+// (an already-canceled subscription is success), and a failed cancel returns an error so Stripe
+// redelivers the event and the cancel is tried again.
+func (s *Service) settleReversal(ctx context.Context, kind, invoiceID string, refs ...string) error <span class="cov6" title="24">{
+        grants, err := s.grantsForRefs(ctx, refs)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov6" title="24">var subscriptions []models.Grant
+        for _, g := range grants </span><span class="cov6" title="29">{
+                if g.Source == models.SourceStripeSubscription </span><span class="cov5" title="19">{
+                        subscriptions = append(subscriptions, g)
+                        continue</span>
+                }
+                <span class="cov4" title="10">if err := s.revokeGrant(ctx, g); err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+        }
+        <span class="cov6" title="24">if len(subscriptions) == 0 </span><span class="cov3" title="6">{
+                return nil
+        }</span>
+        <span class="cov5" title="18">if kind == "refund" </span><span class="cov5" title="15">{
+                if covers, err := s.refundCoversThePlan(ctx, invoiceID); err != nil || !covers </span><span class="cov3" title="4">{
+                        return err
+                }</span>
+        }
+        <span class="cov5" title="14">for _, g := range subscriptions </span><span class="cov5" title="15">{
+                if err := s.revokeGrant(ctx, g); err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+        }
+        <span class="cov5" title="14">for _, id := range distinctExternalIDs(subscriptions) </span><span class="cov5" title="14">{
+                if err := s.cancelSubscription(ctx, id); err != nil </span><span class="cov1" title="1">{
+                        return err
+                }</span>
+        }
+        <span class="cov5" title="13">return nil</span>
+}
+
+// grantsForRefs returns every grant, in any status, that names one of the Stripe objects, once
+// each. Revoked ones are included so a redelivery still reaches the cancel.
+func (s *Service) grantsForRefs(ctx context.Context, refs []string) ([]models.Grant, error) <span class="cov6" title="24">{
+        seen := map[string]bool{}
+        var out []models.Grant
+        for _, ref := range nonEmpty(refs...) </span><span class="cov7" title="62">{
+                grants, err := s.store.GrantsByRef(ctx, ref)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov7" title="62">for _, g := range grants </span><span class="cov7" title="58">{
+                        if key := g.Source + "/" + g.ExternalID + "/" + g.Key + "/" + g.TierID; !seen[key] </span><span class="cov6" title="29">{
+                                seen[key] = true
+                                out = append(out, g)
+                        }</span>
+                }
+        }
+        <span class="cov6" title="24">return out, nil</span>
+}
+
+func (s *Service) revokeGrant(ctx context.Context, g models.Grant) error <span class="cov6" title="25">{
+        if g.Status == models.GrantRevoked </span><span class="cov2" title="3">{
+                return nil
+        }</span>
+        <span class="cov6" title="22">g.Status = models.GrantRevoked
+        return s.store.UpdateGrant(ctx, &amp;g, systemActor)</span>
+}
+
+func distinctExternalIDs(grants []models.Grant) []string <span class="cov5" title="14">{
+        var ids []string
+        for _, g := range grants </span><span class="cov5" title="15">{
+                if !slices.Contains(ids, g.ExternalID) </span><span class="cov5" title="14">{
+                        ids = append(ids, g.ExternalID)
+                }</span>
+        }
+        <span class="cov5" title="14">return ids</span>
+}
+
+// planPaymentReasons are the invoice billing reasons for the plan's own payments.
+var planPaymentReasons = []string{"subscription_create", "subscription_cycle"}
+
+// refundCoversThePlan decides from the refunded charge's invoice whether a refund is for the
+// plan itself. A refund with no invoice reference, or one whose invoice cannot be found, changes
+// nothing and is logged; a failed lookup is returned so Stripe redelivers the event.
+func (s *Service) refundCoversThePlan(ctx context.Context, invoiceID string) (bool, error) <span class="cov5" title="15">{
+        if invoiceID == "" </span><span class="cov1" title="1">{
+                logging.Logger.Warn("refunded charge names no invoice; leaving the subscription and grants as they are")
+                return false, nil
+        }</span>
+        <span class="cov5" title="14">inv, err := s.gw.Invoice(ctx, invoiceID)
+        if err != nil </span><span class="cov2" title="2">{
+                var se *stripe.Error
+                if errors.As(err, &amp;se) &amp;&amp; se.Code == stripe.ErrorCodeResourceMissing </span><span class="cov1" title="1">{
+                        logging.Logger.Warn("refunded charge's invoice was not found; leaving the subscription and grants as they are", "invoice", invoiceID)
+                        return false, nil
+                }</span>
+                <span class="cov1" title="1">return false, providerFailed("refund invoice lookup", err, "invoice", invoiceID)</span>
+        }
+        <span class="cov5" title="12">if !slices.Contains(planPaymentReasons, inv.BillingReason) </span><span class="cov1" title="1">{
+                logging.Logger.Info("refund is for a plan-change charge, not the plan's own payment; keeping the subscription and grants",
+                        "invoice", invoiceID, "billing_reason", inv.BillingReason)
+                return false, nil
+        }</span>
+        <span class="cov4" title="11">return true, nil</span>
+}
+
+// cancelSubscription cancels the Stripe subscription now. One that is already canceled or gone is
+// the state wanted, so it is success.
+func (s *Service) cancelSubscription(ctx context.Context, subscriptionID string) error <span class="cov5" title="14">{
+        if err := s.gw.CancelSubscription(ctx, subscriptionID); err != nil &amp;&amp; !alreadyCanceled(err) </span><span class="cov1" title="1">{
+                return providerFailed("cancel subscription", err, "subscription", subscriptionID)
+        }</span>
+        <span class="cov5" title="13">logging.Logger.Info("subscription canceled after a refund or dispute", "subscription", subscriptionID)
+        return nil</span>
 }
 
 // wanted expands a purchase into the grants it should have: one key-level grant per entitlement
 // of a product (value x quantity; a flag is simply on), or a single tier grant. A product that
 // no longer exists yields none.
-func (s *Service) wanted(ctx context.Context, p purchase) ([]models.Grant, error) <span class="cov9" title="69">{
+func (s *Service) wanted(ctx context.Context, p purchase) ([]models.Grant, error) <span class="cov8" title="111">{
         base := models.Grant{
                 UserID: p.userID, Source: p.source, ExternalID: p.externalID,
                 ValidUntil: p.validUntil, Refs: p.refs, Status: models.GrantActive,
         }
         switch </span>{
-        case p.productID != "":<span class="cov8" title="43">
+        case p.productID != "":<span class="cov7" title="44">
                 products, err := s.store.GetProducts(ctx, []string{p.productID})
                 if err != nil </span><span class="cov0" title="0">{
                         return nil, err
                 }</span>
-                <span class="cov8" title="43">if len(products) == 0 </span><span class="cov1" title="1">{
+                <span class="cov7" title="44">if len(products) == 0 </span><span class="cov1" title="1">{
                         logging.Logger.Warn("stripe event names a product that is not in the catalog", "product", p.productID, "external_id", p.externalID)
                         return nil, nil
                 }</span>
-                <span class="cov8" title="42">out := make([]models.Grant, 0, len(products[0].Entitlements))
-                for _, e := range products[0].Entitlements </span><span class="cov8" title="48">{
+                <span class="cov7" title="43">out := make([]models.Grant, 0, len(products[0].Entitlements))
+                for _, e := range products[0].Entitlements </span><span class="cov7" title="50">{
                         g := base
                         g.Key, g.Value, g.ProductID, g.Quantity, g.Mode = e.Key, grantValue(e, p.quantity), p.productID, p.quantity, e.Mode
                         out = append(out, g)
                 }</span>
-                <span class="cov8" title="42">return out, nil</span>
-        case p.tierID != "":<span class="cov7" title="26">
+                <span class="cov7" title="43">return out, nil</span>
+        case p.tierID != "":<span class="cov7" title="67">
                 g := base
                 g.TierID = p.tierID
                 return []models.Grant{g}, nil</span>
@@ -1325,11 +1493,11 @@ func (s *Service) wanted(ctx context.Context, p purchase) ([]models.Grant, error
 
 // grantValue is what one purchase grants: a flag is on, an at_least floor is the same whatever the
 // quantity, and an add entitlement is its value per unit x quantity.
-func grantValue(e models.ProductEntitlement, quantity int64) int64 <span class="cov8" title="62">{
-        if e.Type == models.TypeFlag </span><span class="cov5" title="10">{
+func grantValue(e models.ProductEntitlement, quantity int64) int64 <span class="cov7" title="64">{
+        if e.Type == models.TypeFlag </span><span class="cov5" title="12">{
                 return 1
         }</span>
-        <span class="cov8" title="52">if e.IsAtLeast() </span><span class="cov8" title="40">{
+        <span class="cov7" title="52">if e.IsAtLeast() </span><span class="cov6" title="40">{
                 return e.Value
         }</span>
         <span class="cov5" title="12">return e.Value * quantity</span>
@@ -1340,59 +1508,59 @@ func grantValue(e models.ProductEntitlement, quantity int64) int64 <span class="
 // revoked grant is never touched. Existing grants are updated even when the event carries no
 // product or tier (a renewal invoice), and an event that would create grants without knowing
 // the user is ignored.
-func (s *Service) applyPurchase(ctx context.Context, p purchase) error <span class="cov9" title="69">{
+func (s *Service) applyPurchase(ctx context.Context, p purchase) error <span class="cov8" title="111">{
         existing, err := s.store.GrantsByExternal(ctx, p.source, p.externalID)
         if err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov9" title="69">want, err := s.wanted(ctx, p)
+        <span class="cov8" title="111">want, err := s.wanted(ctx, p)
         if err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov9" title="69">for i := range existing </span><span class="cov5" title="9">{
+        <span class="cov8" title="111">for i := range existing </span><span class="cov6" title="35">{
                 if err := s.mergeGrant(ctx, &amp;existing[i], p); err != nil </span><span class="cov0" title="0">{
                         return err
                 }</span>
         }
-        <span class="cov9" title="69">for _, g := range want </span><span class="cov9" title="74">{
-                if slices.ContainsFunc(existing, func(e models.Grant) bool </span><span class="cov5" title="9">{ return e.Key == g.Key &amp;&amp; e.TierID == g.TierID }</span>) <span class="cov5" title="9">{
+        <span class="cov8" title="111">for _, g := range want </span><span class="cov8" title="117">{
+                if slices.ContainsFunc(existing, func(e models.Grant) bool </span><span class="cov6" title="35">{ return e.Key == g.Key &amp;&amp; e.TierID == g.TierID }</span>) <span class="cov6" title="35">{
                         continue</span>
                 }
-                <span class="cov9" title="65">if g.UserID == "" </span><span class="cov0" title="0">{
+                <span class="cov8" title="82">if g.UserID == "" </span><span class="cov0" title="0">{
                         logging.Logger.Warn("stripe event cannot create a grant without a user", "external_id", p.externalID)
                         return nil
                 }</span>
-                <span class="cov9" title="65">if err := s.store.InsertGrant(ctx, &amp;g, systemActor); err != nil </span><span class="cov1" title="1">{
+                <span class="cov8" title="82">if err := s.store.InsertGrant(ctx, &amp;g, systemActor); err != nil </span><span class="cov1" title="1">{
                         return err
                 }</span>
         }
-        <span class="cov9" title="68">return nil</span>
+        <span class="cov8" title="110">return nil</span>
 }
 
-func (s *Service) mergeGrant(ctx context.Context, cur *models.Grant, p purchase) error <span class="cov5" title="9">{
+func (s *Service) mergeGrant(ctx context.Context, cur *models.Grant, p purchase) error <span class="cov6" title="35">{
         if cur.Status == models.GrantRevoked </span><span class="cov1" title="1">{
                 return nil
         }</span>
-        <span class="cov5" title="8">cur.Status = models.GrantActive
-        if p.userID != "" </span><span class="cov5" title="8">{
+        <span class="cov6" title="34">cur.Status = models.GrantActive
+        if p.userID != "" </span><span class="cov6" title="34">{
                 cur.UserID = p.userID
         }</span>
-        <span class="cov5" title="8">if p.validUntil != nil &amp;&amp; (cur.ValidUntil == nil || p.validUntil.After(*cur.ValidUntil)) </span><span class="cov4" title="7">{
+        <span class="cov6" title="34">if p.validUntil != nil &amp;&amp; (cur.ValidUntil == nil || p.validUntil.After(*cur.ValidUntil)) </span><span class="cov5" title="20">{
                 cur.ValidUntil = p.validUntil
         }</span>
-        <span class="cov5" title="8">for _, r := range p.refs </span><span class="cov6" title="16">{
-                if !slices.Contains(cur.Refs, r) </span><span class="cov6" title="16">{
+        <span class="cov6" title="34">for _, r := range p.refs </span><span class="cov8" title="94">{
+                if !slices.Contains(cur.Refs, r) </span><span class="cov8" title="94">{
                         cur.Refs = append(cur.Refs, r)
                 }</span>
         }
-        <span class="cov5" title="8">return s.store.UpdateGrant(ctx, cur, systemActor)</span>
+        <span class="cov6" title="34">return s.store.UpdateGrant(ctx, cur, systemActor)</span>
 }
 
 // followSubscription reconciles a subscription's grants with its current price and quantity. The
 // price decides the product (a customer who changed plan in the billing portal changes the
 // price, not our metadata); metadata is the fallback. Stripe has already accepted the change, so
 // a result above a key's maximum cannot be refused here; it is logged and checks clamp it.
-func (s *Service) followSubscription(ctx context.Context, sub subscription) error <span class="cov5" title="8">{
+func (s *Service) followSubscription(ctx context.Context, sub subscription) error <span class="cov4" title="8">{
         qty := sub.quantity()
         if qty &lt; 1 </span><span class="cov1" title="1">{
                 return nil
@@ -1409,7 +1577,7 @@ func (s *Service) followSubscription(ctx context.Context, sub subscription) erro
 }
 
 func (s *Service) productFor(ctx context.Context, sub subscription) (*models.Product, error) <span class="cov4" title="7">{
-        if price := sub.priceID(); price != "" </span><span class="cov4" title="5">{
+        if price := sub.priceID(); price != "" </span><span class="cov3" title="5">{
                 p, err := s.store.ProductByPriceID(ctx, price)
                 if err == nil </span><span class="cov3" title="4">{
                         return p, nil
@@ -1418,12 +1586,12 @@ func (s *Service) productFor(ctx context.Context, sub subscription) (*models.Pro
                         return nil, err
                 }</span>
         }
-        <span class="cov3" title="3">if id := sub.Metadata["product_id"]; id != "" </span><span class="cov3" title="3">{
+        <span class="cov2" title="3">if id := sub.Metadata["product_id"]; id != "" </span><span class="cov2" title="3">{
                 products, err := s.store.GetProducts(ctx, []string{id})
                 if err != nil || len(products) == 0 </span><span class="cov0" title="0">{
                         return nil, err
                 }</span>
-                <span class="cov3" title="3">return &amp;products[0], nil</span>
+                <span class="cov2" title="3">return &amp;products[0], nil</span>
         }
         <span class="cov0" title="0">return nil, nil</span>
 }
@@ -1432,16 +1600,16 @@ func (s *Service) productFor(ctx context.Context, sub subscription) (*models.Pro
 // of the product's keys (updated in place, or created), and any grant for a key it no longer
 // has ended. It keeps one set of grants per Stripe object, sharing its ID and validity. A revoked
 // purchase is left alone.
-func (s *Service) replaceEntitlements(ctx context.Context, grants []models.Grant, prod models.Product, qty int64) error <span class="cov6" title="16">{
-        if len(grants) == 0 || slices.ContainsFunc(grants, func(g models.Grant) bool </span><span class="cov6" title="16">{ return g.Status == models.GrantRevoked }</span>) <span class="cov2" title="2">{
+func (s *Service) replaceEntitlements(ctx context.Context, grants []models.Grant, prod models.Product, qty int64) error <span class="cov5" title="16">{
+        if len(grants) == 0 || slices.ContainsFunc(grants, func(g models.Grant) bool </span><span class="cov5" title="16">{ return g.Status == models.GrantRevoked }</span>) <span class="cov2" title="2">{
                 return nil
         }</span>
-        <span class="cov6" title="14">keep := map[string]bool{}
-        for _, e := range prod.Entitlements </span><span class="cov6" title="14">{
+        <span class="cov5" title="14">keep := map[string]bool{}
+        for _, e := range prod.Entitlements </span><span class="cov5" title="14">{
                 keep[e.Key] = true
                 want := grantValue(e, qty)
-                i := slices.IndexFunc(grants, func(g models.Grant) bool </span><span class="cov6" title="14">{ return g.Key == e.Key }</span>)
-                <span class="cov6" title="14">if i &lt; 0 </span><span class="cov2" title="2">{
+                i := slices.IndexFunc(grants, func(g models.Grant) bool </span><span class="cov5" title="14">{ return g.Key == e.Key }</span>)
+                <span class="cov5" title="14">if i &lt; 0 </span><span class="cov2" title="2">{
                         g := grants[0]
                         g.ID, g.Auditable, g.TierID, g.Status = primitive.NilObjectID, mcore.Auditable{}, "", models.GrantActive
                         g.Key, g.Value, g.ProductID, g.Quantity, g.Mode = e.Key, want, prod.Slug, qty, e.Mode
@@ -1454,13 +1622,13 @@ func (s *Service) replaceEntitlements(ctx context.Context, grants []models.Grant
                 if g.Value == want &amp;&amp; g.Quantity == qty &amp;&amp; g.ProductID == prod.Slug &amp;&amp; g.Mode == e.Mode &amp;&amp; g.Status == models.GrantActive </span><span class="cov1" title="1">{
                         continue</span>
                 }
-                <span class="cov5" title="11">g.Value, g.Quantity, g.ProductID, g.Mode, g.Status = want, qty, prod.Slug, e.Mode, models.GrantActive
+                <span class="cov4" title="11">g.Value, g.Quantity, g.ProductID, g.Mode, g.Status = want, qty, prod.Slug, e.Mode, models.GrantActive
                 if err := s.store.UpdateGrant(ctx, g, systemActor); err != nil </span><span class="cov0" title="0">{
                         return err
                 }</span>
-                <span class="cov5" title="11">s.warnIfOverMaximum(ctx, g)</span>
+                <span class="cov4" title="11">s.warnIfOverMaximum(ctx, g)</span>
         }
-        <span class="cov6" title="14">for i := range grants </span><span class="cov6" title="14">{
+        <span class="cov5" title="14">for i := range grants </span><span class="cov5" title="14">{
                 if keep[grants[i].Key] || grants[i].Status != models.GrantActive </span><span class="cov5" title="12">{
                         continue</span>
                 }
@@ -1469,13 +1637,13 @@ func (s *Service) replaceEntitlements(ctx context.Context, grants []models.Grant
                         return err
                 }</span>
         }
-        <span class="cov6" title="14">return nil</span>
+        <span class="cov5" title="14">return nil</span>
 }
 
 // quantityOf is the quantity a purchase was made at, 1 if unrecorded.
-func quantityOf(grants []models.Grant) int64 <span class="cov5" title="9">{
-        for _, g := range grants </span><span class="cov5" title="9">{
-                if g.Quantity &gt; 0 </span><span class="cov5" title="9">{
+func quantityOf(grants []models.Grant) int64 <span class="cov4" title="9">{
+        for _, g := range grants </span><span class="cov4" title="9">{
+                if g.Quantity &gt; 0 </span><span class="cov4" title="9">{
                         return g.Quantity
                 }</span>
         }
@@ -1483,7 +1651,7 @@ func quantityOf(grants []models.Grant) int64 <span class="cov5" title="9">{
 }
 
 // warnIfOverMaximum probes whether the user now holds more than the key's maximum.
-func (s *Service) warnIfOverMaximum(ctx context.Context, g *models.Grant) <span class="cov5" title="11">{
+func (s *Service) warnIfOverMaximum(ctx context.Context, g *models.Grant) <span class="cov4" title="11">{
         var exceeded catalog.MaxExceededError
         if err := s.limits.CheckPurchase(ctx, g.UserID, []catalog.Units{{Key: g.Key}}); errors.As(err, &amp;exceeded) </span><span class="cov1" title="1">{
                 logging.Logger.Warn("subscription quantity change passes the key maximum; checks clamp it",
@@ -1492,12 +1660,12 @@ func (s *Service) warnIfOverMaximum(ctx context.Context, g *models.Grant) <span 
 }
 
 // endGrants ends every active grant of one Stripe object together.
-func (s *Service) endGrants(ctx context.Context, source, externalID string) error <span class="cov4" title="5">{
+func (s *Service) endGrants(ctx context.Context, source, externalID string) error <span class="cov3" title="5">{
         grants, err := s.store.GrantsByExternal(ctx, source, externalID)
         if err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov4" title="5">for i := range grants </span><span class="cov4" title="5">{
+        <span class="cov3" title="5">for i := range grants </span><span class="cov3" title="5">{
                 if grants[i].Status != models.GrantActive </span><span class="cov1" title="1">{
                         continue</span>
                 }
@@ -1506,31 +1674,11 @@ func (s *Service) endGrants(ctx context.Context, source, externalID string) erro
                         return err
                 }</span>
         }
-        <span class="cov4" title="5">return nil</span>
+        <span class="cov3" title="5">return nil</span>
 }
 
-// revoke revokes every grant that names one of the Stripe objects, so a bundle goes together.
-func (s *Service) revoke(ctx context.Context, refs ...string) error <span class="cov4" title="5">{
-        for _, ref := range nonEmpty(refs...) </span><span class="cov5" title="11">{
-                grants, err := s.store.GrantsByRef(ctx, ref)
-                if err != nil </span><span class="cov0" title="0">{
-                        return err
-                }</span>
-                <span class="cov5" title="11">for i := range grants </span><span class="cov5" title="11">{
-                        if grants[i].Status == models.GrantRevoked </span><span class="cov2" title="2">{
-                                continue</span>
-                        }
-                        <span class="cov5" title="9">grants[i].Status = models.GrantRevoked
-                        if err := s.store.UpdateGrant(ctx, &amp;grants[i], systemActor); err != nil </span><span class="cov0" title="0">{
-                                return err
-                        }</span>
-                }
-        }
-        <span class="cov4" title="5">return nil</span>
-}
-
-func nonEmpty(vals ...string) []string <span class="cov9" title="74">{
-        return slices.DeleteFunc(slices.Clone(vals), func(v string) bool </span><span class="cov10" title="107">{ return v == "" }</span>)
+func nonEmpty(vals ...string) []string <span class="cov8" title="135">{
+        return slices.DeleteFunc(slices.Clone(vals), func(v string) bool </span><span class="cov10" title="254">{ return v == "" }</span>)
 }
 </pre>
 		
