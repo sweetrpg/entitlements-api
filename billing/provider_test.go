@@ -97,7 +97,7 @@ func TestPortalAndPlanSwitchErrorsAreTypedToo(t *testing.T) {
 	if _, err := s.Portal(context.Background(), "user-6"); !errors.As(err, &pe) || pe.Op != "portal" {
 		t.Errorf("portal err = %v", err)
 	}
-	if _, err := s.Checkout(context.Background(), "user-6", "", CheckoutRequest{ProductID: "members-20"}); !errors.As(err, &pe) || pe.Op != "plan switch" {
+	if _, err := s.Checkout(context.Background(), "user-6", "", CheckoutRequest{ProductID: "members-20", Confirm: true}); !errors.As(err, &pe) || pe.Op != "plan switch" {
 		t.Errorf("switch err = %v", err)
 	}
 	if g := grantsOf(t, st, models.SourceStripeSubscription, "sub_m1")[membersKey]; g.Value != 10 || g.ProductID != "members-10" {

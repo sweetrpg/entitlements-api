@@ -27,8 +27,13 @@ func writeError(c *gin.Context, err error) {
 	var exceeded catalog.MaxExceededError
 	var provider *billing.ProviderError
 	var paymentFailed *billing.PaymentFailedError
+	var confirm *billing.ConfirmationRequiredError
 	var noIncrease catalog.NoIncreaseError
 	switch {
+	case errors.As(err, &confirm):
+		c.JSON(http.StatusConflict, ConfirmationRequiredVO{
+			Error: "confirmation_required", Message: "confirm the plan change to go ahead", Quote: confirm.Quote,
+		})
 	case errors.As(err, &paymentFailed):
 		c.JSON(http.StatusPaymentRequired, apiv.ErrorVO{Error: "payment_failed", Message: paymentFailed.PublicMessage()})
 	case errors.As(err, &provider):

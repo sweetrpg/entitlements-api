@@ -15,7 +15,8 @@ value for a subject. Platform-wide design is in `sweetrpg/platform`'s PADR-0034
 | --- | --- | --- |
 | `GET /check?key=` | user token | The caller's effective value for one key |
 | `GET /check/batch` | user token | Repeated `?key=a.b&key=a.c`, or `?prefix=initiative.` (exactly one of the two) |
-| `POST /billing/checkout` | user token | `{tier_id}` or `{product_id, quantity}` returns `{url}`, a Stripe Checkout page for the caller; 409 `exceeds_maximum` (with `units_remaining`) or `in_use` when refused |
+| `POST /billing/checkout` | user token | `{tier_id}` or `{product_id, quantity}` returns `{url}`, a Stripe Checkout page for the caller. For a plan in a group the caller already subscribes to it is a switch: 409 `confirmation_required` with a `quote` until the body carries `"confirm": true` (and the quote's `proration_date`), then `{"switched": true}`; 402 `payment_failed` if an upgrade's charge fails, nothing changed. Also 409 `exceeds_maximum` (with `units_remaining`), `no_increase`, `in_use` when refused; 502 `payment_provider_error` |
+| `GET /billing/quote?product_id=&quantity=` | user token | What checkout would do and cost, changing nothing: `action` (`checkout`, `switch`, `none`), `current_product`, `new_product`, `currency`, `amount_due_now`, `credit_on_next_invoice`, `proration_lines`, `next_billing_date`, `proration_date` (amounts in minor units) |
 | `POST /billing/portal` | user token | `{url}` for the Stripe billing portal; 404 if the caller never checked out |
 | `POST /webhooks/stripe` | Stripe signature | Public. Verified against the raw body; no user token |
 | `/admin/keys`, `/admin/tiers`, `/admin/products`, `/admin/default-tier`, `/admin/audit` | admin user token | Catalog writes (audited) and reads |
@@ -74,6 +75,13 @@ plan, so a downgrade (20 to 10) is allowed and a plan that raises nothing is not
 made in the billing portal (`customer.subscription.updated`) does the same, matched by the price
 ID. This is enforced at checkout, not at the webhook, so two subscriptions created outside this
 flow are not merged.
+
+A switch needs the user's explicit consent. `GET /billing/quote` shows the price (for a switch, from
+Stripe's invoice preview using the proration the real switch will use); `POST /billing/checkout`
+for a switch without `confirm: true` answers **409** `confirmation_required` with the same quote
+and changes nothing at Stripe. Clients show the quote, then repeat the request with
+`confirm: true` and the quote's `proration_date`, which pins the proration so the charge matches
+the figure shown (it must be within the last hour).
 
 A switch to a higher total (unit amount x the subscription's quantity) is charged now: Stripe is
 told `always_invoice` and `error_if_incomplete`, so the prorated difference is invoiced at once and
