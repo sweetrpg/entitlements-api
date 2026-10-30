@@ -71,3 +71,37 @@ func providerFailed(op string, err error, fields ...any) error {
 	logging.Logger.Error("payment provider call failed", args...)
 	return pe
 }
+
+// paymentFailureCodes are Stripe error codes that mean the customer's payment did not go through
+// (as opposed to a mistake in the request): a decline, or a card that needs authentication, which
+// an off-session charge cannot get.
+var paymentFailureCodes = map[string]bool{
+	"card_declined":                               true,
+	"expired_card":                                true,
+	"incorrect_cvc":                               true,
+	"insufficient_funds":                          true,
+	"authentication_required":                     true,
+	"payment_intent_authentication_failure":       true,
+	"subscription_payment_intent_requires_action": true,
+	"payment_method_provider_decline":             true,
+	"processing_error":                            true,
+}
+
+// PaymentFailed reports whether the provider refused the charge itself.
+func (e *ProviderError) PaymentFailed() bool {
+	return e.API && (e.Type == string(stripe.ErrorTypeCard) || paymentFailureCodes[e.Code])
+}
+
+// PaymentFailedError means a plan change that had to be paid for now was not paid, and so was not
+// made: the subscription and the grants are unchanged.
+type PaymentFailedError struct{ cause *ProviderError }
+
+func (e *PaymentFailedError) Error() string { return "payment failed; the plan was not changed" }
+
+// Unwrap exposes the provider error to errors.As.
+func (e *PaymentFailedError) Unwrap() error { return e.cause }
+
+// PublicMessage is safe to show a caller.
+func (e *PaymentFailedError) PublicMessage() string {
+	return "the payment could not be completed, so the plan was not changed"
+}

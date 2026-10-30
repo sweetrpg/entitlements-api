@@ -75,6 +75,15 @@ made in the billing portal (`customer.subscription.updated`) does the same, matc
 ID. This is enforced at checkout, not at the webhook, so two subscriptions created outside this
 flow are not merged.
 
+A switch to a higher total (unit amount x the subscription's quantity) is charged now: Stripe is
+told `always_invoice` and `error_if_incomplete`, so the prorated difference is invoiced at once and
+a payment that fails fails the whole update. The service then answers **402**
+`{"error": "payment_failed"}` and the subscription and grants are unchanged. A switch to an equal
+or lower total uses `create_prorations`: the unused time is credited to the next invoice and
+nothing is charged now. Grants change only after Stripe accepts the update. Plans in different
+currencies cannot be switched; plans billed on different intervals are compared by unit amount
+only.
+
 A purchase creates one key-level grant per entitlement, valued per-unit value x quantity and
 sharing the purchase's Stripe ID (payment intent, or subscription), so a refund, dispute, or
 cancel ends them together. A subscription quantity change (`customer.subscription.updated`)
