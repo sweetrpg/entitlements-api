@@ -1,3 +1,12 @@
+## [0.5.1] - 2026-10-30
+
+### 🐛 Bug Fixes
+
+- *(billing)* Cancel the subscription when a refund or dispute revokes it
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Merge master into develop after v0.5.0
 ## [0.5.0] - 2026-10-30
 
 ### 🚀 Features
