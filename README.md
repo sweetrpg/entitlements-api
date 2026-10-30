@@ -130,7 +130,11 @@ subscription as metadata, and every grant is built from that metadata.
 | `checkout.session.completed`, `checkout.session.async_payment_succeeded` | Create the grant (`stripe_subscription` keyed on the subscription ID, `stripe_purchase` on the payment intent) and remember the customer |
 | `invoice.paid` | Create or extend the subscription grant; `valid_until` is the latest period end and only moves forward |
 | `customer.subscription.deleted`, `customer.subscription.updated` with `unpaid`, `canceled`, or `incomplete_expired` | Grant becomes `ended` (`past_due` stays active while Stripe retries) |
-| `charge.refunded` (full refund only), `charge.dispute.created` | Grant becomes `revoked` and stays revoked; only an administrator reinstates it |
+| `charge.refunded` (full refund only), `charge.dispute.created` | Grants become `revoked` and stay revoked; only an administrator reinstates them. For a subscription the Stripe subscription is also canceled at once (no final invoice, nothing extra refunded), so the customer is not billed again. A refund counts only if the charge's invoice has billing reason `subscription_create` or `subscription_cycle`; a refund of a plan-change charge (`subscription_update`) is treated like a partial refund and changes nothing (INFO), and a refund with no resolvable invoice does nothing (WARN). A dispute always revokes and cancels. One-off purchases are only revoked |
+
+A failed cancel returns 500 so Stripe redelivers the event; entitlements are already revoked by
+then, the cancel is retried, and a subscription that is already canceled or missing counts as
+success, so repeated deliveries are no-ops.
 
 Delivery is at-least-once. An event ID is recorded after its handler succeeds and skipped on
 replay; a failed handler returns 500 so Stripe retries. Event types not listed return 200.

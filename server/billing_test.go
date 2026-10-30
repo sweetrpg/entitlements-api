@@ -57,6 +57,12 @@ func (fakeStripe) PreviewSwitch(context.Context, billing.SwitchParams) (billing.
 	}}, fakeStripeErr
 }
 
+func (fakeStripe) Invoice(context.Context, string) (billing.InvoiceInfo, error) {
+	return billing.InvoiceInfo{BillingReason: "subscription_create"}, nil
+}
+
+func (fakeStripe) CancelSubscription(context.Context, string) error { return nil }
+
 // fakeSwitchErr, when set by a test, is returned by SwitchPlan only.
 var fakeSwitchErr error
 
