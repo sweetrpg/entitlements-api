@@ -63,8 +63,11 @@ func (s *MongoStore) EnsureIndexes(ctx context.Context) error {
 		return err
 	}
 	for coll, ms := range indexSpecs() {
-		if _, err := s.db.Collection(coll).Indexes().CreateMany(ctx, ms); err != nil {
-			return fmt.Errorf("indexes on %s: %w", coll, err)
+		ix := mongoIndexer{view: s.db.Collection(coll).Indexes()}
+		for _, m := range ms {
+			if err := ensureIndex(ctx, ix, m); err != nil {
+				return fmt.Errorf("index %v on %s: %w", m.Keys, coll, err)
+			}
 		}
 	}
 	return nil
