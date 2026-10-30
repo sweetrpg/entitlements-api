@@ -1,0 +1,1 @@
+{"id":"evt_inv_up","object":"event","type":"invoice.paid","data":{"object":{"id":"in_up","object":"invoice","subscription":"sub_1","payment_intent":"pi_up","charge":"ch_up","subscription_details":{"metadata":{"user_id":"user-1","tier_id":"plus"}},"lines":{"data":[{"period":{"end":1792592000}}]}}}}

@@ -33,6 +33,10 @@ type Gateway interface {
 	Price(ctx context.Context, priceID string) (PriceInfo, error)
 	// Subscription reads a subscription's line item, quantity, and period end.
 	Subscription(ctx context.Context, subscriptionID string) (SubscriptionInfo, error)
+	// Invoice reads why an invoice was created (billing_reason).
+	Invoice(ctx context.Context, invoiceID string) (InvoiceInfo, error)
+	// CancelSubscription ends a subscription immediately: no further invoices, nothing refunded.
+	CancelSubscription(ctx context.Context, subscriptionID string) error
 	// PreviewSwitch asks Stripe what the switch in p would invoice, without changing anything.
 	PreviewSwitch(ctx context.Context, p SwitchParams) (Preview, error)
 	// SwitchPlan moves an existing subscription to another price instead of creating a second
@@ -66,6 +70,14 @@ const (
 	// ProrateInvoiceNow invoices the proration immediately, so an upgrade is paid for now.
 	ProrateInvoiceNow = "always_invoice"
 )
+
+// InvoiceInfo is what a refund decision needs to know about an invoice.
+type InvoiceInfo struct {
+	ID string
+	// BillingReason is subscription_create or subscription_cycle for the plan's own payments, and
+	// subscription_update for a charge made by changing plan.
+	BillingReason string
+}
 
 // Preview is Stripe's invoice preview for a proposed switch.
 type Preview struct {
@@ -185,6 +197,27 @@ func (g *StripeGateway) Subscription(ctx context.Context, subscriptionID string)
 		info.CustomerID = sub.Customer.ID
 	}
 	return info, nil
+}
+
+// Invoice reads an invoice's billing reason.
+func (g *StripeGateway) Invoice(ctx context.Context, invoiceID string) (InvoiceInfo, error) {
+	inv, err := g.client.V1Invoices.Retrieve(ctx, invoiceID, nil)
+	if err != nil {
+		return InvoiceInfo{}, fmt.Errorf("retrieve invoice: %w", err)
+	}
+	return InvoiceInfo{ID: inv.ID, BillingReason: string(inv.BillingReason)}, nil
+}
+
+// CancelSubscription cancels now without a final invoice or proration refund; the refund that
+// prompted it is left exactly as it is.
+func (g *StripeGateway) CancelSubscription(ctx context.Context, subscriptionID string) error {
+	_, err := g.client.V1Subscriptions.Cancel(ctx, subscriptionID, &stripe.SubscriptionCancelParams{
+		InvoiceNow: stripe.Bool(false), Prorate: stripe.Bool(false),
+	})
+	if err != nil {
+		return fmt.Errorf("cancel subscription: %w", err)
+	}
+	return nil
 }
 
 // PreviewSwitch previews the invoice the switch would produce with the same item change,
