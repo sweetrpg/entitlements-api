@@ -105,3 +105,14 @@ func (e *PaymentFailedError) Unwrap() error { return e.cause }
 func (e *PaymentFailedError) PublicMessage() string {
 	return "the payment could not be completed, so the plan was not changed"
 }
+
+// alreadyCanceled reports whether a cancel failed only because the subscription is already gone
+// or already canceled, which is the state the cancel was after.
+func alreadyCanceled(err error) bool {
+	var se *stripe.Error
+	if !errors.As(err, &se) {
+		return false
+	}
+	return se.Code == stripe.ErrorCodeResourceMissing ||
+		(se.Type == stripe.ErrorTypeInvalidRequest && strings.Contains(strings.ToLower(se.Msg), "canceled subscription"))
+}

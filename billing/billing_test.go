@@ -42,6 +42,11 @@ type fakeGateway struct {
 	switchErr  error // returned only by SwitchPlan
 	readErr    error // returned only by Price and Subscription
 	previewErr error
+	invoices   map[string]InvoiceInfo
+	invoiceErr error
+	canceled   []string
+	cancelErr  error
+	cancelFail int // the next N cancels fail with cancelErr, then succeed
 	preview    Preview
 	previewed  []SwitchParams
 	prices     map[string]PriceInfo
@@ -87,6 +92,29 @@ func (f *fakeGateway) Subscription(_ context.Context, id string) (SubscriptionIn
 	}
 	return SubscriptionInfo{ID: id, CustomerID: "cus_x", ItemID: "si_" + id, Quantity: 1,
 		Price: PriceInfo{ID: "price_old", UnitAmount: 1000, Currency: "usd", Interval: "month", IntervalCount: 1}}, nil
+}
+
+// Invoice returns a configured invoice, or a subscription-creation invoice for an unknown ID.
+func (f *fakeGateway) Invoice(_ context.Context, id string) (InvoiceInfo, error) {
+	if f.invoiceErr != nil {
+		return InvoiceInfo{}, f.invoiceErr
+	}
+	if inv, ok := f.invoices[id]; ok {
+		return inv, nil
+	}
+	return InvoiceInfo{ID: id, BillingReason: "subscription_create"}, nil
+}
+
+// CancelSubscription records the cancel; it fails cancelFail times first when cancelErr is set.
+func (f *fakeGateway) CancelSubscription(_ context.Context, id string) error {
+	f.canceled = append(f.canceled, id)
+	if f.cancelErr != nil && (f.cancelFail < 0 || f.cancelFail > 0) {
+		if f.cancelFail > 0 {
+			f.cancelFail--
+		}
+		return f.cancelErr
+	}
+	return nil
 }
 
 // PreviewSwitch records what it was asked and returns the configured preview.

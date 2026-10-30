@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/stripe/stripe-go/v87"
 	"github.com/sweetrpg/common.go/logging"
 	"github.com/sweetrpg/entitlements-api/catalog"
 	"github.com/sweetrpg/entitlements-api/data"
@@ -152,7 +153,7 @@ func (s *Service) onSubscriptionDeleted(ctx context.Context, raw json.RawMessage
 	return s.endGrants(ctx, models.SourceStripeSubscription, sub.ID)
 }
 
-// onChargeRefunded revokes only on a full refund; a partial refund leaves the grants alone.
+// onChargeRefunded acts only on a full refund; a partial refund leaves everything alone.
 func (s *Service) onChargeRefunded(ctx context.Context, raw json.RawMessage) error {
 	var ch charge
 	if err := json.Unmarshal(raw, &ch); err != nil {
@@ -161,15 +162,138 @@ func (s *Service) onChargeRefunded(ctx context.Context, raw json.RawMessage) err
 	if !ch.Refunded {
 		return nil
 	}
-	return s.revoke(ctx, ch.ID, ch.PaymentIntent, ch.Invoice)
+	return s.settleReversal(ctx, "refund", ch.Invoice, ch.ID, ch.PaymentIntent, ch.Invoice)
 }
 
+// onDispute always revokes, and cancels a subscription, whatever the disputed charge was for.
 func (s *Service) onDispute(ctx context.Context, raw json.RawMessage) error {
 	var d dispute
 	if err := json.Unmarshal(raw, &d); err != nil {
 		return err
 	}
-	return s.revoke(ctx, d.Charge, d.PaymentIntent)
+	return s.settleReversal(ctx, "dispute", "", d.Charge, d.PaymentIntent)
+}
+
+// settleReversal revokes the grants a refund or dispute names. A one-off purchase is only revoked.
+// For a subscription it also cancels the Stripe subscription, so a customer who got their money
+// back is not billed again. A refund counts only when it is for the plan's own payment (its
+// creation or a renewal); a refund of a plan-change charge is treated like a partial refund and
+// changes nothing. refs are the Stripe object IDs the event names; invoiceID is the refunded
+// charge's invoice, used only for refunds.
+//
+// Revoking comes first so the entitlement goes at once; the cancel that follows is idempotent
+// (an already-canceled subscription is success), and a failed cancel returns an error so Stripe
+// redelivers the event and the cancel is tried again.
+func (s *Service) settleReversal(ctx context.Context, kind, invoiceID string, refs ...string) error {
+	grants, err := s.grantsForRefs(ctx, refs)
+	if err != nil {
+		return err
+	}
+	var subscriptions []models.Grant
+	for _, g := range grants {
+		if g.Source == models.SourceStripeSubscription {
+			subscriptions = append(subscriptions, g)
+			continue
+		}
+		if err := s.revokeGrant(ctx, g); err != nil {
+			return err
+		}
+	}
+	if len(subscriptions) == 0 {
+		return nil
+	}
+	if kind == "refund" {
+		if covers, err := s.refundCoversThePlan(ctx, invoiceID); err != nil || !covers {
+			return err
+		}
+	}
+	for _, g := range subscriptions {
+		if err := s.revokeGrant(ctx, g); err != nil {
+			return err
+		}
+	}
+	for _, id := range distinctExternalIDs(subscriptions) {
+		if err := s.cancelSubscription(ctx, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// grantsForRefs returns every grant, in any status, that names one of the Stripe objects, once
+// each. Revoked ones are included so a redelivery still reaches the cancel.
+func (s *Service) grantsForRefs(ctx context.Context, refs []string) ([]models.Grant, error) {
+	seen := map[string]bool{}
+	var out []models.Grant
+	for _, ref := range nonEmpty(refs...) {
+		grants, err := s.store.GrantsByRef(ctx, ref)
+		if err != nil {
+			return nil, err
+		}
+		for _, g := range grants {
+			if key := g.Source + "/" + g.ExternalID + "/" + g.Key + "/" + g.TierID; !seen[key] {
+				seen[key] = true
+				out = append(out, g)
+			}
+		}
+	}
+	return out, nil
+}
+
+func (s *Service) revokeGrant(ctx context.Context, g models.Grant) error {
+	if g.Status == models.GrantRevoked {
+		return nil
+	}
+	g.Status = models.GrantRevoked
+	return s.store.UpdateGrant(ctx, &g, systemActor)
+}
+
+func distinctExternalIDs(grants []models.Grant) []string {
+	var ids []string
+	for _, g := range grants {
+		if !slices.Contains(ids, g.ExternalID) {
+			ids = append(ids, g.ExternalID)
+		}
+	}
+	return ids
+}
+
+// planPaymentReasons are the invoice billing reasons for the plan's own payments.
+var planPaymentReasons = []string{"subscription_create", "subscription_cycle"}
+
+// refundCoversThePlan decides from the refunded charge's invoice whether a refund is for the
+// plan itself. A refund with no invoice reference, or one whose invoice cannot be found, changes
+// nothing and is logged; a failed lookup is returned so Stripe redelivers the event.
+func (s *Service) refundCoversThePlan(ctx context.Context, invoiceID string) (bool, error) {
+	if invoiceID == "" {
+		logging.Logger.Warn("refunded charge names no invoice; leaving the subscription and grants as they are")
+		return false, nil
+	}
+	inv, err := s.gw.Invoice(ctx, invoiceID)
+	if err != nil {
+		var se *stripe.Error
+		if errors.As(err, &se) && se.Code == stripe.ErrorCodeResourceMissing {
+			logging.Logger.Warn("refunded charge's invoice was not found; leaving the subscription and grants as they are", "invoice", invoiceID)
+			return false, nil
+		}
+		return false, providerFailed("refund invoice lookup", err, "invoice", invoiceID)
+	}
+	if !slices.Contains(planPaymentReasons, inv.BillingReason) {
+		logging.Logger.Info("refund is for a plan-change charge, not the plan's own payment; keeping the subscription and grants",
+			"invoice", invoiceID, "billing_reason", inv.BillingReason)
+		return false, nil
+	}
+	return true, nil
+}
+
+// cancelSubscription cancels the Stripe subscription now. One that is already canceled or gone is
+// the state wanted, so it is success.
+func (s *Service) cancelSubscription(ctx context.Context, subscriptionID string) error {
+	if err := s.gw.CancelSubscription(ctx, subscriptionID); err != nil && !alreadyCanceled(err) {
+		return providerFailed("cancel subscription", err, "subscription", subscriptionID)
+	}
+	logging.Logger.Info("subscription canceled after a refund or dispute", "subscription", subscriptionID)
+	return nil
 }
 
 // wanted expands a purchase into the grants it should have: one key-level grant per entitlement
@@ -386,26 +510,6 @@ func (s *Service) endGrants(ctx context.Context, source, externalID string) erro
 		grants[i].Status = models.GrantEnded
 		if err := s.store.UpdateGrant(ctx, &grants[i], systemActor); err != nil {
 			return err
-		}
-	}
-	return nil
-}
-
-// revoke revokes every grant that names one of the Stripe objects, so a bundle goes together.
-func (s *Service) revoke(ctx context.Context, refs ...string) error {
-	for _, ref := range nonEmpty(refs...) {
-		grants, err := s.store.GrantsByRef(ctx, ref)
-		if err != nil {
-			return err
-		}
-		for i := range grants {
-			if grants[i].Status == models.GrantRevoked {
-				continue
-			}
-			grants[i].Status = models.GrantRevoked
-			if err := s.store.UpdateGrant(ctx, &grants[i], systemActor); err != nil {
-				return err
-			}
 		}
 	}
 	return nil
