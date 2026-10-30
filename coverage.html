@@ -81,27 +81,29 @@
 				
 				<option value="file12">github.com/sweetrpg/entitlements-api/config/config.go (100.0%)</option>
 				
-				<option value="file13">github.com/sweetrpg/entitlements-api/data/memory.go (26.1%)</option>
+				<option value="file13">github.com/sweetrpg/entitlements-api/data/index_ensure.go (77.4%)</option>
 				
-				<option value="file14">github.com/sweetrpg/entitlements-api/data/mongo.go (1.5%)</option>
+				<option value="file14">github.com/sweetrpg/entitlements-api/data/memory.go (26.1%)</option>
 				
-				<option value="file15">github.com/sweetrpg/entitlements-api/docs/docs.go (0.0%)</option>
+				<option value="file15">github.com/sweetrpg/entitlements-api/data/mongo.go (1.5%)</option>
 				
-				<option value="file16">github.com/sweetrpg/entitlements-api/models/models.go (93.5%)</option>
+				<option value="file16">github.com/sweetrpg/entitlements-api/docs/docs.go (0.0%)</option>
 				
-				<option value="file17">github.com/sweetrpg/entitlements-api/server/admin.go (90.2%)</option>
+				<option value="file17">github.com/sweetrpg/entitlements-api/models/models.go (93.5%)</option>
 				
-				<option value="file18">github.com/sweetrpg/entitlements-api/server/admin_products.go (100.0%)</option>
+				<option value="file18">github.com/sweetrpg/entitlements-api/server/admin.go (90.2%)</option>
 				
-				<option value="file19">github.com/sweetrpg/entitlements-api/server/billing.go (90.9%)</option>
+				<option value="file19">github.com/sweetrpg/entitlements-api/server/admin_products.go (100.0%)</option>
 				
-				<option value="file20">github.com/sweetrpg/entitlements-api/server/checks.go (100.0%)</option>
+				<option value="file20">github.com/sweetrpg/entitlements-api/server/billing.go (90.9%)</option>
 				
-				<option value="file21">github.com/sweetrpg/entitlements-api/server/errors.go (90.0%)</option>
+				<option value="file21">github.com/sweetrpg/entitlements-api/server/checks.go (100.0%)</option>
 				
-				<option value="file22">github.com/sweetrpg/entitlements-api/server/handlers.go (100.0%)</option>
+				<option value="file22">github.com/sweetrpg/entitlements-api/server/errors.go (90.0%)</option>
 				
-				<option value="file23">github.com/sweetrpg/entitlements-api/server/status.go (54.5%)</option>
+				<option value="file23">github.com/sweetrpg/entitlements-api/server/handlers.go (100.0%)</option>
+				
+				<option value="file24">github.com/sweetrpg/entitlements-api/server/status.go (54.5%)</option>
 				
 				</select>
 			</div>
@@ -2806,6 +2808,156 @@ func absoluteURL(v string) bool <span class="cov8" title="9">{
 
 import (
         "context"
+        "errors"
+        "fmt"
+
+        "go.mongodb.org/mongo-driver/bson"
+        "go.mongodb.org/mongo-driver/mongo"
+)
+
+// MongoDB command error codes for creating an index that clashes with an existing one: same
+// options under another name (85), same keys with different options or name (86).
+const (
+        codeIndexOptionsConflict  = 85
+        codeIndexKeySpecsConflict = 86
+)
+
+// indexer is one collection's index set, so index creation can be tested without a database.
+type indexer interface {
+        create(ctx context.Context, m mongo.IndexModel) error
+        list(ctx context.Context) ([]bson.Raw, error)
+}
+
+type mongoIndexer struct{ view mongo.IndexView }
+
+func (m mongoIndexer) create(ctx context.Context, model mongo.IndexModel) error <span class="cov0" title="0">{
+        _, err := m.view.CreateOne(ctx, model)
+        return err
+}</span>
+
+func (m mongoIndexer) list(ctx context.Context) ([]bson.Raw, error) <span class="cov0" title="0">{
+        cur, err := m.view.List(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">var out []bson.Raw
+        if err := cur.All(ctx, &amp;out); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">return out, nil</span>
+}
+
+// ensureIndex creates an index unless an equivalent one exists. Several replicas start together
+// and run this at the same moment, so one can find the index already built by another, possibly
+// under a different name; that is the goal reached, not a failure. A clash with an index that
+// differs in keys, uniqueness, or filter is still an error.
+func ensureIndex(ctx context.Context, ix indexer, m mongo.IndexModel) error <span class="cov9" title="17">{
+        err := ix.create(ctx, m)
+        if err == nil || !isIndexConflict(err) </span><span class="cov4" title="3">{
+                return err
+        }</span>
+        <span class="cov8" title="14">existing, lerr := ix.list(ctx)
+        if lerr != nil </span><span class="cov1" title="1">{
+                return fmt.Errorf("%w (and listing indexes to compare failed: %v)", err, lerr)
+        }</span>
+        <span class="cov8" title="13">for _, e := range existing </span><span class="cov9" title="19">{
+                if equivalentIndex(e, m) </span><span class="cov6" title="7">{
+                        return nil
+                }</span>
+        }
+        <span class="cov6" title="6">return err</span>
+}
+
+func isIndexConflict(err error) bool <span class="cov8" title="16">{
+        var ce mongo.CommandError
+        return errors.As(err, &amp;ce) &amp;&amp; (ce.Code == codeIndexOptionsConflict || ce.Code == codeIndexKeySpecsConflict)
+}</span>
+
+// equivalentIndex reports whether an existing index spec (as listIndexes returns it) has the same
+// keys in the same order and directions, the same uniqueness, and the same partial filter as the
+// model. The name is ignored.
+func equivalentIndex(existing bson.Raw, want mongo.IndexModel) bool <span class="cov9" title="19">{
+        wantKeys, err := bson.Marshal(want.Keys)
+        if err != nil </span><span class="cov0" title="0">{
+                return false
+        }</span>
+        <span class="cov9" title="19">have, err := existing.LookupErr("key")
+        if err != nil </span><span class="cov0" title="0">{
+                return false
+        }</span>
+        <span class="cov9" title="19">haveDoc, ok := have.DocumentOK()
+        if !ok || !sameKeys(haveDoc, bson.Raw(wantKeys)) </span><span class="cov7" title="9">{
+                return false
+        }</span>
+        <span class="cov7" title="10">return uniqueOf(existing) == wantUnique(want) &amp;&amp; sameFilter(existing, want)</span>
+}
+
+// sameKeys compares key patterns by field name and direction, ignoring the number type the
+// server stored the direction as.
+func sameKeys(a, b bson.Raw) bool <span class="cov9" title="19">{
+        ae, err1 := a.Elements()
+        be, err2 := b.Elements()
+        if err1 != nil || err2 != nil || len(ae) != len(be) </span><span class="cov0" title="0">{
+                return false
+        }</span>
+        <span class="cov9" title="19">for i := range ae </span><span class="cov9" title="20">{
+                if ae[i].Key() != be[i].Key() </span><span class="cov6" title="8">{
+                        return false
+                }</span>
+                <span class="cov8" title="12">av, aok := number(ae[i].Value())
+                bv, bok := number(be[i].Value())
+                if !aok || !bok || av != bv </span><span class="cov1" title="1">{
+                        // Not numeric (text, 2dsphere): compare as is.
+                        if aok || bok || ae[i].Value().String() != be[i].Value().String() </span><span class="cov1" title="1">{
+                                return false
+                        }</span>
+                }
+        }
+        <span class="cov7" title="10">return true</span>
+}
+
+func number(v bson.RawValue) (float64, bool) <span class="cov10" title="24">{
+        switch v.Type </span>{
+        case bson.TypeInt32:<span class="cov9" title="20">
+                return float64(v.Int32()), true</span>
+        case bson.TypeInt64:<span class="cov2" title="2">
+                return float64(v.Int64()), true</span>
+        case bson.TypeDouble:<span class="cov2" title="2">
+                return v.Double(), true</span>
+        }
+        <span class="cov0" title="0">return 0, false</span>
+}
+
+func uniqueOf(existing bson.Raw) bool <span class="cov7" title="10">{
+        v, err := existing.LookupErr("unique")
+        return err == nil &amp;&amp; v.Type == bson.TypeBoolean &amp;&amp; v.Boolean()
+}</span>
+
+func wantUnique(m mongo.IndexModel) bool <span class="cov7" title="10">{
+        return m.Options != nil &amp;&amp; m.Options.Unique != nil &amp;&amp; *m.Options.Unique
+}</span>
+
+func sameFilter(existing bson.Raw, want mongo.IndexModel) bool <span class="cov7" title="9">{
+        have, haveErr := existing.LookupErr("partialFilterExpression")
+        if want.Options == nil || want.Options.PartialFilterExpression == nil </span><span class="cov1" title="1">{
+                return haveErr != nil
+        }</span>
+        <span class="cov6" title="8">if haveErr != nil </span><span class="cov1" title="1">{
+                return false
+        }</span>
+        <span class="cov6" title="7">wantBytes, err := bson.Marshal(want.Options.PartialFilterExpression)
+        if err != nil </span><span class="cov0" title="0">{
+                return false
+        }</span>
+        <span class="cov6" title="7">doc, ok := have.DocumentOK()
+        return ok &amp;&amp; doc.String() == bson.Raw(wantBytes).String()</span>
+}
+</pre>
+		
+		<pre class="file" id="file14" style="display: none">package data
+
+import (
+        "context"
         "slices"
         "strings"
         "sync"
@@ -3205,7 +3357,7 @@ func window[T any](s []T, limit, skip int64) []T <span class="cov0" title="0">{
 }
 </pre>
 		
-		<pre class="file" id="file14" style="display: none">package data
+		<pre class="file" id="file15" style="display: none">package data
 
 import (
         "context"
@@ -3270,9 +3422,12 @@ func (s *MongoStore) EnsureIndexes(ctx context.Context) error <span class="cov0"
                 return err
         }</span>
         <span class="cov0" title="0">for coll, ms := range indexSpecs() </span><span class="cov0" title="0">{
-                if _, err := s.db.Collection(coll).Indexes().CreateMany(ctx, ms); err != nil </span><span class="cov0" title="0">{
-                        return fmt.Errorf("indexes on %s: %w", coll, err)
-                }</span>
+                ix := mongoIndexer{view: s.db.Collection(coll).Indexes()}
+                for _, m := range ms </span><span class="cov0" title="0">{
+                        if err := ensureIndex(ctx, ix, m); err != nil </span><span class="cov0" title="0">{
+                                return fmt.Errorf("index %v on %s: %w", m.Keys, coll, err)
+                        }</span>
+                }
         }
         <span class="cov0" title="0">return nil</span>
 }
@@ -3570,7 +3725,7 @@ func mapNoDoc(err error) error <span class="cov0" title="0">{
 }
 </pre>
 		
-		<pre class="file" id="file15" style="display: none">// Package docs Code generated by swaggo/swag. DO NOT EDIT
+		<pre class="file" id="file16" style="display: none">// Package docs Code generated by swaggo/swag. DO NOT EDIT
 package docs
 
 import "github.com/swaggo/swag"
@@ -4102,7 +4257,7 @@ func init() <span class="cov0" title="0">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file16" style="display: none">// Package models holds the entitlements catalog and grant documents.
+		<pre class="file" id="file17" style="display: none">// Package models holds the entitlements catalog and grant documents.
 package models
 
 import (
@@ -4349,7 +4504,7 @@ func FormatValue(t KeyType, v int64) any <span class="cov5" title="3">{
 }
 </pre>
 		
-		<pre class="file" id="file17" style="display: none">package server
+		<pre class="file" id="file18" style="display: none">package server
 
 import (
         "net/http"
@@ -4526,7 +4681,7 @@ func respondEmpty(c *gin.Context, err error) <span class="cov6" title="19">{
 }
 </pre>
 		
-		<pre class="file" id="file18" style="display: none">package server
+		<pre class="file" id="file19" style="display: none">package server
 
 import (
         "net/http"
@@ -4627,7 +4782,7 @@ func setupAdminProductHandlers(a *gin.RouterGroup, svc *catalog.Service) <span c
 }
 </pre>
 		
-		<pre class="file" id="file19" style="display: none">package server
+		<pre class="file" id="file20" style="display: none">package server
 
 import (
         "encoding/base64"
@@ -4812,7 +4967,7 @@ func tokenEmail(token string) string <span class="cov8" title="21">{
 }
 </pre>
 		
-		<pre class="file" id="file20" style="display: none">package server
+		<pre class="file" id="file21" style="display: none">package server
 
 import (
         "fmt"
@@ -4947,7 +5102,7 @@ func cacheControl(ttl int) string <span class="cov7" title="14">{
 }
 </pre>
 		
-		<pre class="file" id="file21" style="display: none">package server
+		<pre class="file" id="file22" style="display: none">package server
 
 import (
         "errors"
@@ -5012,7 +5167,7 @@ func badRequest(c *gin.Context, msg string) <span class="cov6" title="7">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file22" style="display: none">package server
+		<pre class="file" id="file23" style="display: none">package server
 
 import (
         "github.com/gin-gonic/gin"
@@ -5032,7 +5187,7 @@ func SetupHandlers(g *gin.Engine, svc *catalog.Service, bill *billing.Service, a
 }</span>
 </pre>
 		
-		<pre class="file" id="file23" style="display: none">package server
+		<pre class="file" id="file24" style="display: none">package server
 
 import (
         "net/http"
