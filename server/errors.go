@@ -26,8 +26,11 @@ func writeError(c *gin.Context, err error) {
 	var unknown catalog.UnknownKeysError
 	var exceeded catalog.MaxExceededError
 	var provider *billing.ProviderError
+	var paymentFailed *billing.PaymentFailedError
 	var noIncrease catalog.NoIncreaseError
 	switch {
+	case errors.As(err, &paymentFailed):
+		c.JSON(http.StatusPaymentRequired, apiv.ErrorVO{Error: "payment_failed", Message: paymentFailed.PublicMessage()})
 	case errors.As(err, &provider):
 		c.JSON(http.StatusBadGateway, apiv.ErrorVO{Error: "payment_provider_error", Message: provider.PublicMessage()})
 	case errors.As(err, &noIncrease):

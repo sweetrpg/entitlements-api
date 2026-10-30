@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/sweetrpg/entitlements-api/catalog"
@@ -97,12 +98,58 @@ type planSwitch struct {
 	product        models.Product
 }
 
-// switchPlan changes the Stripe subscription, then applies the new product's entitlements to its
-// grants right away; the customer.subscription.updated event that follows finds nothing to change.
-func (s *Service) switchPlan(ctx context.Context, userID string, sw *planSwitch, p CheckoutParams) (CheckoutResult, error) {
-	err := s.gw.SwitchPlan(ctx, SwitchParams{SubscriptionID: sw.subscriptionID, PriceID: p.PriceID, ProductID: sw.product.Slug, UserID: userID})
+// switchPlan is a decided plan change: what to send Stripe and whether it is an upgrade.
+type switchPlan struct {
+	params  SwitchParams
+	upgrade bool
+	sub     SubscriptionInfo
+	price   PriceInfo
+}
+
+// decideSwitch reads the subscription and the new price from Stripe and chooses how to change
+// plan. A change that raises the subscription's total (unit amount x quantity) is invoiced
+// immediately and must be paid for; a change that lowers or keeps it credits the unused time to
+// the next invoice.
+func (s *Service) decideSwitch(ctx context.Context, userID string, sw *planSwitch, priceID string) (*switchPlan, error) {
+	ids := []any{"product", sw.product.Slug, "subscription", sw.subscriptionID, "price_id", priceID}
+	sub, err := s.gw.Subscription(ctx, sw.subscriptionID)
 	if err != nil {
-		return CheckoutResult{}, providerFailed("plan switch", err, "product", sw.product.Slug, "subscription", sw.subscriptionID, "price_id", p.PriceID)
+		return nil, providerFailed("plan switch", err, ids...)
+	}
+	price, err := s.gw.Price(ctx, priceID)
+	if err != nil {
+		return nil, providerFailed("plan switch", err, ids...)
+	}
+	if !strings.EqualFold(sub.Price.Currency, price.Currency) {
+		return nil, fmt.Errorf("%w: the plans are billed in different currencies", models.ErrInvalid)
+	}
+	qty := max(sub.Quantity, 1)
+	d := &switchPlan{sub: sub, price: price, upgrade: price.UnitAmount*qty > sub.Price.UnitAmount*qty}
+	d.params = SwitchParams{
+		SubscriptionID: sw.subscriptionID, CustomerID: sub.CustomerID, ItemID: sub.ItemID, Quantity: qty,
+		PriceID: priceID, ProductID: sw.product.Slug, UserID: userID, Proration: ProrateCredit,
+	}
+	if d.upgrade {
+		d.params.Proration, d.params.ChargeNow = ProrateInvoiceNow, true
+	}
+	return d, nil
+}
+
+// switchPlan changes the Stripe subscription and only then applies the new product's entitlements
+// to its grants; the customer.subscription.updated event that follows finds nothing to change. A
+// failed upgrade payment leaves both Stripe and the grants as they were.
+func (s *Service) switchPlan(ctx context.Context, userID string, sw *planSwitch, p CheckoutParams) (CheckoutResult, error) {
+	d, err := s.decideSwitch(ctx, userID, sw, p.PriceID)
+	if err != nil {
+		return CheckoutResult{}, err
+	}
+	if err := s.gw.SwitchPlan(ctx, d.params); err != nil {
+		perr := providerFailed("plan switch", err, "product", sw.product.Slug, "subscription", sw.subscriptionID,
+			"price_id", p.PriceID, "proration", d.params.Proration)
+		if pe, ok := perr.(*ProviderError); ok && d.params.ChargeNow && pe.PaymentFailed() {
+			return CheckoutResult{}, &PaymentFailedError{cause: pe}
+		}
+		return CheckoutResult{}, perr
 	}
 	grants, err := s.store.GrantsByExternal(ctx, models.SourceStripeSubscription, sw.subscriptionID)
 	if err != nil {

@@ -34,7 +34,29 @@ func (fakeStripe) CreateCheckout(_ context.Context, p billing.CheckoutParams) (s
 	return "https://checkout.example/" + p.UserID + "/" + p.TierID + p.ProductID + "?email=" + p.Email, nil
 }
 
-func (fakeStripe) SwitchPlan(context.Context, billing.SwitchParams) error { return fakeStripeErr }
+// Price is 10.00 USD a month, or 20.00 for an ID ending in 20.
+func (fakeStripe) Price(_ context.Context, id string) (billing.PriceInfo, error) {
+	amount := int64(1000)
+	if strings.HasSuffix(id, "20") {
+		amount = 2000
+	}
+	return billing.PriceInfo{ID: id, UnitAmount: amount, Currency: "usd", Interval: "month", IntervalCount: 1}, fakeStripeErr
+}
+
+func (fakeStripe) Subscription(_ context.Context, id string) (billing.SubscriptionInfo, error) {
+	return billing.SubscriptionInfo{ID: id, CustomerID: "cus_x", ItemID: "si_" + id, Quantity: 1,
+		Price: billing.PriceInfo{ID: "price_old", UnitAmount: 1000, Currency: "usd", Interval: "month", IntervalCount: 1}}, fakeStripeErr
+}
+
+// fakeSwitchErr, when set by a test, is returned by SwitchPlan only.
+var fakeSwitchErr error
+
+func (fakeStripe) SwitchPlan(context.Context, billing.SwitchParams) error {
+	if fakeSwitchErr != nil {
+		return fakeSwitchErr
+	}
+	return fakeStripeErr
+}
 
 func (fakeStripe) CreatePortal(_ context.Context, customerID, _ string) (string, error) {
 	if fakeStripeErr != nil {
@@ -335,5 +357,35 @@ func TestStripeFailureOnCheckoutIs502WithASafeMessage(t *testing.T) {
 	rec = do(r, "POST", "/billing/portal", userTok, ``)
 	if rec.Code != http.StatusNotFound { // no customer yet: the portal never reaches the provider
 		t.Errorf("portal without a customer = %d", rec.Code)
+	}
+}
+
+func TestFailedUpgradePaymentIs402(t *testing.T) {
+	r, st := newRouter(t)
+	mustCode(t, do(r, "POST", "/admin/keys", adminTok, `{"key":"a.members","type":"limit"}`), http.StatusCreated)
+	for _, n := range []string{"10", "20"} {
+		adminProduct(t, r, `{"id":"m`+n+`","name":"M`+n+`","billing":"recurring","plan_group":"members","stripe_price_id":"price_`+n+
+			`","entitlements":{"a.members":{"value":`+n+`,"mode":"at_least"}}}`)
+	}
+	st.AddGrant(models.Grant{UserID: "canonical-" + userTok, Key: "a.members", Value: 10, Mode: models.ModeAtLeast, ProductID: "m10",
+		Source: models.SourceStripeSubscription, ExternalID: "sub_1", Status: models.GrantActive})
+	// price_20 costs more than the subscription's 10.00, so m20 is an upgrade that is charged now.
+	old := fakeSwitchErr
+	fakeSwitchErr = &stripe.Error{Type: stripe.ErrorTypeCard, Code: stripe.ErrorCodeCardDeclined, Msg: "declined", RequestID: "req_x"}
+	t.Cleanup(func() { fakeSwitchErr = old })
+
+	rec := do(r, "POST", "/billing/checkout", userTok, `{"product_id":"m20"}`)
+	mustCode(t, rec, http.StatusPaymentRequired)
+	var vo apiv.ErrorVO
+	_ = json.Unmarshal(rec.Body.Bytes(), &vo)
+	if vo.Error != "payment_failed" || vo.Message != "the payment could not be completed, so the plan was not changed" {
+		t.Errorf("body = %s", rec.Body)
+	}
+	if strings.Contains(rec.Body.String(), "req_x") || strings.Contains(rec.Body.String(), "declined") {
+		t.Errorf("body leaks provider details: %s", rec.Body)
+	}
+	gs, _ := st.GrantsByExternal(context.Background(), models.SourceStripeSubscription, "sub_1")
+	if len(gs) != 1 || gs[0].ProductID != "m10" {
+		t.Errorf("a failed payment changed the grants: %+v", gs)
 	}
 }
