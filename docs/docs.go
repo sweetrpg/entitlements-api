@@ -24,6 +24,148 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/billing/checkout": {
+            "post": {
+                "description": "Returns a Stripe-hosted checkout URL, or switches the caller's existing subscription in the product's plan group. A switch needs confirm=true: without it the response is 409 confirmation_required carrying a quote to show the user; an upgrade is charged immediately and a failed payment is 402 payment_failed with nothing changed.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "billing"
+                ],
+                "summary": "Start a checkout or switch a plan",
+                "parameters": [
+                    {
+                        "description": "tier_id or product_id (+ quantity, confirm, proration_date)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.checkoutBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.SessionVO"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/vo.ErrorVO"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/vo.ErrorVO"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/server.ConfirmationRequiredVO"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/vo.ErrorVO"
+                        }
+                    }
+                }
+            }
+        },
+        "/billing/portal": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "billing"
+                ],
+                "summary": "Open the billing portal",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.SessionVO"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/vo.ErrorVO"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/vo.ErrorVO"
+                        }
+                    }
+                }
+            }
+        },
+        "/billing/quote": {
+            "get": {
+                "description": "What POST /billing/checkout would do and what it would cost, changing nothing. action is checkout, switch, or none. Amounts are minor units (cents). For a switch the figure comes from Stripe's invoice preview with the same proration the real switch uses; send proration_date back with confirm so the charge matches.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "billing"
+                ],
+                "summary": "Quote a purchase or plan change",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Product to buy or switch to",
+                        "name": "product_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Quantity (default 1)",
+                        "name": "quantity",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/billing.Quote"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/vo.ErrorVO"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/vo.ErrorVO"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/vo.ErrorVO"
+                        }
+                    }
+                }
+            }
+        },
         "/check": {
             "get": {
                 "description": "Effective value for one key for the verified caller. Cacheable for ttl_seconds.",
@@ -169,6 +311,71 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "billing.Quote": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "amount_due_now": {
+                    "description": "AmountDueNow is what is charged when the user goes ahead: price x quantity for a checkout, the\nprorated difference for an upgrade, and 0 for a downgrade.",
+                    "type": "integer"
+                },
+                "credit_on_next_invoice": {
+                    "description": "CreditOnNextInvoice is the credit a downgrade earns against the next invoice.",
+                    "type": "integer"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "current_product": {
+                    "$ref": "#/definitions/billing.QuoteProduct"
+                },
+                "new_product": {
+                    "$ref": "#/definitions/billing.QuoteProduct"
+                },
+                "next_billing_date": {
+                    "description": "NextBillingDate is when the subscription renews next; empty for a one-off purchase.",
+                    "type": "string"
+                },
+                "proration_date": {
+                    "description": "ProrationDate pins the proration to the moment of the quote. Send it back with confirm so the\ncharge matches the figure shown; omit it and Stripe prorates at the time of the request.",
+                    "type": "integer"
+                },
+                "proration_lines": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/billing.QuoteLine"
+                    }
+                },
+                "quantity": {
+                    "type": "integer"
+                }
+            }
+        },
+        "billing.QuoteLine": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "description": "minor units; negative is a credit",
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string"
+                }
+            }
+        },
+        "billing.QuoteProduct": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "models.KeyType": {
             "type": "string",
             "enum": [
@@ -204,6 +411,53 @@ const docTemplate = `{
                     "$ref": "#/definitions/models.KeyType"
                 },
                 "value": {}
+            }
+        },
+        "server.ConfirmationRequiredVO": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "quote": {
+                    "$ref": "#/definitions/billing.Quote"
+                }
+            }
+        },
+        "server.SessionVO": {
+            "type": "object",
+            "properties": {
+                "switched": {
+                    "type": "boolean"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "server.checkoutBody": {
+            "type": "object",
+            "properties": {
+                "confirm": {
+                    "description": "Confirm is the user's go-ahead to switch their subscription to another plan in the same\ngroup. Without it a switch is answered with 409 confirmation_required and the quote.",
+                    "type": "boolean"
+                },
+                "product_id": {
+                    "type": "string"
+                },
+                "proration_date": {
+                    "description": "ProrationDate is the proration_date from the quote being confirmed.",
+                    "type": "integer"
+                },
+                "quantity": {
+                    "type": "integer"
+                },
+                "tier_id": {
+                    "type": "string"
+                }
             }
         },
         "vo.ErrorVO": {

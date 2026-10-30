@@ -39,6 +39,13 @@ func loadEvent(t *testing.T, name string) Event {
 
 type fakeGateway struct {
 	err        error // returned by every call when set
+	switchErr  error // returned only by SwitchPlan
+	readErr    error // returned only by Price and Subscription
+	previewErr error
+	preview    Preview
+	previewed  []SwitchParams
+	prices     map[string]PriceInfo
+	subs       map[string]SubscriptionInfo
 	switched   SwitchParams
 	checkout   CheckoutParams
 	portalCust string
@@ -53,9 +60,53 @@ func (f *fakeGateway) CreateCheckout(_ context.Context, p CheckoutParams) (strin
 	return "https://checkout.example/session", nil
 }
 
+// Price returns a configured price, or a 10.00 USD monthly one for an unknown ID.
+func (f *fakeGateway) Price(_ context.Context, priceID string) (PriceInfo, error) {
+	if f.err != nil {
+		return PriceInfo{}, f.err
+	}
+	if f.readErr != nil {
+		return PriceInfo{}, f.readErr
+	}
+	if p, ok := f.prices[priceID]; ok {
+		return p, nil
+	}
+	return PriceInfo{ID: priceID, UnitAmount: 1000, Currency: "usd", Interval: "month", IntervalCount: 1}, nil
+}
+
+// Subscription returns a configured subscription, or a 10.00 USD monthly single-unit one.
+func (f *fakeGateway) Subscription(_ context.Context, id string) (SubscriptionInfo, error) {
+	if f.err != nil {
+		return SubscriptionInfo{}, f.err
+	}
+	if f.readErr != nil {
+		return SubscriptionInfo{}, f.readErr
+	}
+	if s, ok := f.subs[id]; ok {
+		return s, nil
+	}
+	return SubscriptionInfo{ID: id, CustomerID: "cus_x", ItemID: "si_" + id, Quantity: 1,
+		Price: PriceInfo{ID: "price_old", UnitAmount: 1000, Currency: "usd", Interval: "month", IntervalCount: 1}}, nil
+}
+
+// PreviewSwitch records what it was asked and returns the configured preview.
+func (f *fakeGateway) PreviewSwitch(_ context.Context, p SwitchParams) (Preview, error) {
+	if f.err != nil {
+		return Preview{}, f.err
+	}
+	if f.previewErr != nil {
+		return Preview{}, f.previewErr
+	}
+	f.previewed = append(f.previewed, p)
+	return f.preview, nil
+}
+
 func (f *fakeGateway) SwitchPlan(_ context.Context, p SwitchParams) error {
 	if f.err != nil {
 		return f.err
+	}
+	if f.switchErr != nil {
+		return f.switchErr
 	}
 	f.switched = p
 	return nil

@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -34,7 +35,37 @@ func (fakeStripe) CreateCheckout(_ context.Context, p billing.CheckoutParams) (s
 	return "https://checkout.example/" + p.UserID + "/" + p.TierID + p.ProductID + "?email=" + p.Email, nil
 }
 
-func (fakeStripe) SwitchPlan(context.Context, billing.SwitchParams) error { return fakeStripeErr }
+// Price is 10.00 USD a month, or 20.00 for an ID ending in 20.
+func (fakeStripe) Price(_ context.Context, id string) (billing.PriceInfo, error) {
+	amount := int64(1000)
+	if strings.HasSuffix(id, "20") {
+		amount = 2000
+	}
+	return billing.PriceInfo{ID: id, UnitAmount: amount, Currency: "usd", Interval: "month", IntervalCount: 1}, fakeStripeErr
+}
+
+func (fakeStripe) Subscription(_ context.Context, id string) (billing.SubscriptionInfo, error) {
+	return billing.SubscriptionInfo{ID: id, CustomerID: "cus_x", ItemID: "si_" + id, Quantity: 1,
+		Price: billing.PriceInfo{ID: "price_old", UnitAmount: 1000, Currency: "usd", Interval: "month", IntervalCount: 1}}, fakeStripeErr
+}
+
+func (fakeStripe) PreviewSwitch(context.Context, billing.SwitchParams) (billing.Preview, error) {
+	return billing.Preview{Currency: "usd", Lines: []billing.PreviewLine{
+		{Description: "Remaining time on M20", Amount: 1500, Proration: true},
+		{Description: "Unused time on M10", Amount: -500, Proration: true},
+		{Description: "M20 renewal", Amount: 2000},
+	}}, fakeStripeErr
+}
+
+// fakeSwitchErr, when set by a test, is returned by SwitchPlan only.
+var fakeSwitchErr error
+
+func (fakeStripe) SwitchPlan(context.Context, billing.SwitchParams) error {
+	if fakeSwitchErr != nil {
+		return fakeSwitchErr
+	}
+	return fakeStripeErr
+}
 
 func (fakeStripe) CreatePortal(_ context.Context, customerID, _ string) (string, error) {
 	if fakeStripeErr != nil {
@@ -297,14 +328,14 @@ func TestCheckoutInAPlanGroupSwitchesInsteadOfCreatingASession(t *testing.T) {
 	st.AddGrant(models.Grant{UserID: "canonical-" + userTok, Key: "a.members", Value: 10, Mode: models.ModeAtLeast, ProductID: "m10",
 		Source: models.SourceStripeSubscription, ExternalID: "sub_1", Status: models.GrantActive})
 
-	rec := do(r, "POST", "/billing/checkout", userTok, `{"product_id":"m20"}`)
+	rec := do(r, "POST", "/billing/checkout", userTok, `{"product_id":"m20","confirm":true}`)
 	mustCode(t, rec, http.StatusOK)
 	var vo SessionVO
 	_ = json.Unmarshal(rec.Body.Bytes(), &vo)
 	if !vo.Switched || vo.URL != "" {
 		t.Errorf("body = %s", rec.Body)
 	}
-	mustCode(t, do(r, "POST", "/billing/checkout", userTok, `{"product_id":"m20"}`), http.StatusConflict)
+	mustCode(t, do(r, "POST", "/billing/checkout", userTok, `{"product_id":"m20","confirm":true}`), http.StatusConflict)
 
 	rec = do(r, "GET", "/admin/products", adminTok, "")
 	if !strings.Contains(rec.Body.String(), `"plan_group":"members"`) {
@@ -335,5 +366,83 @@ func TestStripeFailureOnCheckoutIs502WithASafeMessage(t *testing.T) {
 	rec = do(r, "POST", "/billing/portal", userTok, ``)
 	if rec.Code != http.StatusNotFound { // no customer yet: the portal never reaches the provider
 		t.Errorf("portal without a customer = %d", rec.Code)
+	}
+}
+
+func TestFailedUpgradePaymentIs402(t *testing.T) {
+	r, st := newRouter(t)
+	mustCode(t, do(r, "POST", "/admin/keys", adminTok, `{"key":"a.members","type":"limit"}`), http.StatusCreated)
+	for _, n := range []string{"10", "20"} {
+		adminProduct(t, r, `{"id":"m`+n+`","name":"M`+n+`","billing":"recurring","plan_group":"members","stripe_price_id":"price_`+n+
+			`","entitlements":{"a.members":{"value":`+n+`,"mode":"at_least"}}}`)
+	}
+	st.AddGrant(models.Grant{UserID: "canonical-" + userTok, Key: "a.members", Value: 10, Mode: models.ModeAtLeast, ProductID: "m10",
+		Source: models.SourceStripeSubscription, ExternalID: "sub_1", Status: models.GrantActive})
+	// price_20 costs more than the subscription's 10.00, so m20 is an upgrade that is charged now.
+	old := fakeSwitchErr
+	fakeSwitchErr = &stripe.Error{Type: stripe.ErrorTypeCard, Code: stripe.ErrorCodeCardDeclined, Msg: "declined", RequestID: "req_x"}
+	t.Cleanup(func() { fakeSwitchErr = old })
+
+	rec := do(r, "POST", "/billing/checkout", userTok, `{"product_id":"m20","confirm":true}`)
+	mustCode(t, rec, http.StatusPaymentRequired)
+	var vo apiv.ErrorVO
+	_ = json.Unmarshal(rec.Body.Bytes(), &vo)
+	if vo.Error != "payment_failed" || vo.Message != "the payment could not be completed, so the plan was not changed" {
+		t.Errorf("body = %s", rec.Body)
+	}
+	if strings.Contains(rec.Body.String(), "req_x") || strings.Contains(rec.Body.String(), "declined") {
+		t.Errorf("body leaks provider details: %s", rec.Body)
+	}
+	gs, _ := st.GrantsByExternal(context.Background(), models.SourceStripeSubscription, "sub_1")
+	if len(gs) != 1 || gs[0].ProductID != "m10" {
+		t.Errorf("a failed payment changed the grants: %+v", gs)
+	}
+}
+
+func TestSwitchWithoutConfirmIs409WithTheQuote(t *testing.T) {
+	r, st := newRouter(t)
+	mustCode(t, do(r, "POST", "/admin/keys", adminTok, `{"key":"a.members","type":"limit"}`), http.StatusCreated)
+	for _, n := range []string{"10", "20"} {
+		adminProduct(t, r, `{"id":"m`+n+`","name":"Members `+n+`","billing":"recurring","plan_group":"members","stripe_price_id":"price_`+n+
+			`","entitlements":{"a.members":{"value":`+n+`,"mode":"at_least"}}}`)
+	}
+	st.AddGrant(models.Grant{UserID: "canonical-" + userTok, Key: "a.members", Value: 10, Mode: models.ModeAtLeast, ProductID: "m10",
+		Source: models.SourceStripeSubscription, ExternalID: "sub_1", Status: models.GrantActive})
+
+	rec := do(r, "POST", "/billing/checkout", userTok, `{"product_id":"m20"}`)
+	mustCode(t, rec, http.StatusConflict)
+	var vo ConfirmationRequiredVO
+	_ = json.Unmarshal(rec.Body.Bytes(), &vo)
+	if vo.Error != "confirmation_required" || vo.Quote == nil || vo.Quote.Action != "switch" || vo.Quote.AmountDueNow != 1000 ||
+		vo.Quote.CurrentProduct.ID != "m10" || vo.Quote.NewProduct.Name != "Members 20" || len(vo.Quote.ProrationLines) != 2 {
+		t.Errorf("body = %s", rec.Body)
+	}
+	gs, _ := st.GrantsByExternal(context.Background(), models.SourceStripeSubscription, "sub_1")
+	if len(gs) != 1 || gs[0].ProductID != "m10" {
+		t.Errorf("an unconfirmed switch changed the grants: %+v", gs)
+	}
+
+	rec = do(r, "POST", "/billing/checkout", userTok, `{"product_id":"m20","confirm":true,"proration_date":`+strconv.FormatInt(vo.Quote.ProrationDate, 10)+`}`)
+	mustCode(t, rec, http.StatusOK)
+	if !strings.Contains(rec.Body.String(), `"switched":true`) {
+		t.Errorf("body = %s", rec.Body)
+	}
+}
+
+func TestQuoteEndpoint(t *testing.T) {
+	r, _ := newRouter(t)
+	mustCode(t, do(r, "GET", "/billing/quote?product_id=x", "", ""), http.StatusUnauthorized)
+	mustCode(t, do(r, "GET", "/billing/quote", userTok, ""), http.StatusBadRequest)
+	mustCode(t, do(r, "GET", "/billing/quote?product_id=x&quantity=many", userTok, ""), http.StatusBadRequest)
+	mustCode(t, do(r, "GET", "/billing/quote?product_id=ghost", userTok, ""), http.StatusBadRequest)
+
+	mustCode(t, do(r, "POST", "/admin/keys", adminTok, `{"key":"a.slots","type":"limit"}`), http.StatusCreated)
+	adminProduct(t, r, `{"id":"slot","name":"Slot","billing":"recurring","repeatable":true,"stripe_price_id":"price_s","entitlements":{"a.slots":1}}`)
+	rec := do(r, "GET", "/billing/quote?product_id=slot&quantity=2", userTok, "")
+	mustCode(t, rec, http.StatusOK)
+	var q billing.Quote
+	_ = json.Unmarshal(rec.Body.Bytes(), &q)
+	if q.Action != "checkout" || q.AmountDueNow != 2000 || q.Quantity != 2 || q.Currency != "usd" || q.NewProduct.ID != "slot" {
+		t.Errorf("quote = %s", rec.Body)
 	}
 }

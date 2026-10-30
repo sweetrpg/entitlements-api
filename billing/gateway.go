@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/stripe/stripe-go/v87"
 )
@@ -28,17 +29,75 @@ type CheckoutParams struct {
 type Gateway interface {
 	CreateCheckout(ctx context.Context, p CheckoutParams) (url string, err error)
 	CreatePortal(ctx context.Context, customerID, returnURL string) (url string, err error)
-	// SwitchPlan moves an existing subscription to another price, prorated by Stripe, instead of
-	// creating a second subscription.
+	// Price reads a price's amount, currency, and interval.
+	Price(ctx context.Context, priceID string) (PriceInfo, error)
+	// Subscription reads a subscription's line item, quantity, and period end.
+	Subscription(ctx context.Context, subscriptionID string) (SubscriptionInfo, error)
+	// PreviewSwitch asks Stripe what the switch in p would invoice, without changing anything.
+	PreviewSwitch(ctx context.Context, p SwitchParams) (Preview, error)
+	// SwitchPlan moves an existing subscription to another price instead of creating a second
+	// subscription, with the proration and payment behavior in p.
 	SwitchPlan(ctx context.Context, p SwitchParams) error
 }
 
-// SwitchParams names the subscription to change and the product it moves to.
+// PriceInfo is what a switch needs to know about a Stripe price.
+type PriceInfo struct {
+	ID            string
+	UnitAmount    int64 // minor units (cents)
+	Currency      string
+	Interval      string // day, week, month, or year; empty for a one-off price
+	IntervalCount int64
+}
+
+// SubscriptionInfo is a subscription's single line item as Stripe holds it.
+type SubscriptionInfo struct {
+	ID               string
+	CustomerID       string
+	ItemID           string
+	Price            PriceInfo
+	Quantity         int64
+	CurrentPeriodEnd time.Time
+}
+
+// Proration behaviors for a plan switch.
+const (
+	// ProrateCredit credits the unused part of the old plan to the next invoice.
+	ProrateCredit = "create_prorations"
+	// ProrateInvoiceNow invoices the proration immediately, so an upgrade is paid for now.
+	ProrateInvoiceNow = "always_invoice"
+)
+
+// Preview is Stripe's invoice preview for a proposed switch.
+type Preview struct {
+	Currency string
+	Lines    []PreviewLine
+}
+
+// PreviewLine is one line of a preview. Proration marks the lines created by the plan change
+// itself (the unused time on the old plan and the remaining time on the new), as opposed to the
+// renewal that would follow.
+type PreviewLine struct {
+	Description string
+	Amount      int64 // minor units; negative is a credit
+	Proration   bool
+}
+
+// SwitchParams is one subscription plan change.
 type SwitchParams struct {
 	SubscriptionID string
+	CustomerID     string
+	ItemID         string
+	Quantity       int64
 	PriceID        string
 	ProductID      string
 	UserID         string
+	// Proration is ProrateCredit or ProrateInvoiceNow.
+	Proration string
+	// ChargeNow makes a failed payment fail the whole update (Stripe's error_if_incomplete)
+	// rather than leaving the subscription changed and unpaid.
+	ChargeNow bool
+	// ProrationDate pins the moment proration is computed (unix seconds); 0 means now.
+	ProrationDate int64
 }
 
 // StripeGateway calls the live Stripe API. It is a thin translation layer with no rules of its
@@ -91,25 +150,94 @@ func (g *StripeGateway) CreateCheckout(ctx context.Context, p CheckoutParams) (s
 	return sess.URL, nil
 }
 
-// SwitchPlan replaces the subscription's price with the new one, keeping its quantity, and
-// records the new product in the subscription's metadata. Stripe prorates the change.
-func (g *StripeGateway) SwitchPlan(ctx context.Context, p SwitchParams) error {
-	sub, err := g.client.V1Subscriptions.Retrieve(ctx, p.SubscriptionID, nil)
+// Price reads a price.
+func (g *StripeGateway) Price(ctx context.Context, priceID string) (PriceInfo, error) {
+	price, err := g.client.V1Prices.Retrieve(ctx, priceID, nil)
 	if err != nil {
-		return fmt.Errorf("retrieve subscription: %w", err)
+		return PriceInfo{}, fmt.Errorf("retrieve price: %w", err)
 	}
-	if sub.Items == nil || len(sub.Items.Data) == 0 {
-		return fmt.Errorf("subscription %s has no items", p.SubscriptionID)
+	return priceInfo(price), nil
+}
+
+func priceInfo(p *stripe.Price) PriceInfo {
+	info := PriceInfo{ID: p.ID, UnitAmount: p.UnitAmount, Currency: string(p.Currency)}
+	if p.Recurring != nil {
+		info.Interval, info.IntervalCount = string(p.Recurring.Interval), p.Recurring.IntervalCount
+	}
+	return info
+}
+
+// Subscription reads a subscription and its first line item.
+func (g *StripeGateway) Subscription(ctx context.Context, subscriptionID string) (SubscriptionInfo, error) {
+	sub, err := g.client.V1Subscriptions.Retrieve(ctx, subscriptionID, nil)
+	if err != nil {
+		return SubscriptionInfo{}, fmt.Errorf("retrieve subscription: %w", err)
+	}
+	if sub.Items == nil || len(sub.Items.Data) == 0 || sub.Items.Data[0].Price == nil {
+		return SubscriptionInfo{}, fmt.Errorf("subscription %s has no priced item", subscriptionID)
 	}
 	item := sub.Items.Data[0]
-	_, err = g.client.V1Subscriptions.Update(ctx, p.SubscriptionID, &stripe.SubscriptionUpdateParams{
-		Items: []*stripe.SubscriptionUpdateItemParams{{
-			ID: stripe.String(item.ID), Price: stripe.String(p.PriceID), Quantity: stripe.Int64(max(item.Quantity, 1)),
+	info := SubscriptionInfo{
+		ID: sub.ID, ItemID: item.ID, Price: priceInfo(item.Price), Quantity: max(item.Quantity, 1),
+		CurrentPeriodEnd: time.Unix(item.CurrentPeriodEnd, 0).UTC(),
+	}
+	if sub.Customer != nil {
+		info.CustomerID = sub.Customer.ID
+	}
+	return info, nil
+}
+
+// PreviewSwitch previews the invoice the switch would produce with the same item change,
+// proration behavior, and proration date the real switch would use.
+func (g *StripeGateway) PreviewSwitch(ctx context.Context, p SwitchParams) (Preview, error) {
+	details := &stripe.InvoiceCreatePreviewSubscriptionDetailsParams{
+		Items: []*stripe.InvoiceCreatePreviewSubscriptionDetailsItemParams{{
+			ID: stripe.String(p.ItemID), Price: stripe.String(p.PriceID), Quantity: stripe.Int64(max(p.Quantity, 1)),
 		}},
-		ProrationBehavior: stripe.String("create_prorations"),
-		Metadata:          map[string]string{"user_id": p.UserID, "product_id": p.ProductID},
+		ProrationBehavior: stripe.String(p.Proration),
+	}
+	if p.ProrationDate != 0 {
+		details.ProrationDate = stripe.Int64(p.ProrationDate)
+	}
+	inv, err := g.client.V1Invoices.CreatePreview(ctx, &stripe.InvoiceCreatePreviewParams{
+		Customer:            stripe.String(p.CustomerID),
+		Subscription:        stripe.String(p.SubscriptionID),
+		SubscriptionDetails: details,
 	})
 	if err != nil {
+		return Preview{}, fmt.Errorf("preview subscription change: %w", err)
+	}
+	out := Preview{Currency: string(inv.Currency)}
+	if inv.Lines != nil {
+		for _, l := range inv.Lines.Data {
+			pl := PreviewLine{Description: l.Description, Amount: l.Amount}
+			if l.Parent != nil && l.Parent.SubscriptionItemDetails != nil {
+				pl.Proration = l.Parent.SubscriptionItemDetails.Proration
+			}
+			out.Lines = append(out.Lines, pl)
+		}
+	}
+	return out, nil
+}
+
+// SwitchPlan replaces the subscription item's price, keeping its quantity, and records the new
+// product in the subscription's metadata. A charge-now switch fails as a whole if the payment
+// does not go through, so Stripe never holds a changed, unpaid subscription.
+func (g *StripeGateway) SwitchPlan(ctx context.Context, p SwitchParams) error {
+	params := &stripe.SubscriptionUpdateParams{
+		Items: []*stripe.SubscriptionUpdateItemParams{{
+			ID: stripe.String(p.ItemID), Price: stripe.String(p.PriceID), Quantity: stripe.Int64(max(p.Quantity, 1)),
+		}},
+		ProrationBehavior: stripe.String(p.Proration),
+		Metadata:          map[string]string{"user_id": p.UserID, "product_id": p.ProductID},
+	}
+	if p.ChargeNow {
+		params.PaymentBehavior = stripe.String("error_if_incomplete")
+	}
+	if p.ProrationDate != 0 {
+		params.ProrationDate = stripe.Int64(p.ProrationDate)
+	}
+	if _, err := g.client.V1Subscriptions.Update(ctx, p.SubscriptionID, params); err != nil {
 		return fmt.Errorf("switch subscription: %w", err)
 	}
 	return nil

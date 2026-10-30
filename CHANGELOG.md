@@ -1,3 +1,14 @@
+## [0.5.0] - 2026-10-30
+
+### 🚀 Features
+
+- *(billing)* Charge plan upgrades immediately and fail cleanly
+- *(billing)* Quote plan changes and require confirmation to switch
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Merge master into develop after v0.4.3
+- *(docker)* Deploy new release tags to dev via ArgoCD update job
 ## [0.4.3] - 2026-10-29
 
 ### 🐛 Bug Fixes

@@ -66,7 +66,7 @@ func TestUpgradeSwitchesTheExistingSubscription(t *testing.T) {
 	if v := effective(t, cat, "user-6", membersKey); v != int64(10) {
 		t.Fatalf("before = %v, want 10", v)
 	}
-	res, err := s.Checkout(context.Background(), "user-6", "", CheckoutRequest{ProductID: "members-20"})
+	res, err := s.Checkout(context.Background(), "user-6", "", CheckoutRequest{ProductID: "members-20", Confirm: true})
 	if err != nil || !res.Switched || res.URL != "" {
 		t.Fatalf("result = %+v err = %v", res, err)
 	}
@@ -88,7 +88,7 @@ func TestUpgradeSwitchesTheExistingSubscription(t *testing.T) {
 func TestDowngradeIsJudgedWithoutTheOldPlan(t *testing.T) {
 	s, cat, st, gw := planSetup(t)
 	subscribe(t, s, "user-6", "sub_m1", "members-20")
-	res, err := s.Checkout(context.Background(), "user-6", "", CheckoutRequest{ProductID: "members-10"})
+	res, err := s.Checkout(context.Background(), "user-6", "", CheckoutRequest{ProductID: "members-10", Confirm: true})
 	if err != nil || !res.Switched {
 		t.Fatalf("downgrade refused: %+v %v", res, err)
 	}
@@ -156,7 +156,7 @@ func TestSwitchReplacesTheKeysOfTheGrant(t *testing.T) {
 	if effective(t, cat, "user-6", "initiative.perk_a") != true {
 		t.Fatal("plan A not active")
 	}
-	if _, err := s.Checkout(context.Background(), "user-6", "", CheckoutRequest{ProductID: "plan-b"}); err != nil {
+	if _, err := s.Checkout(context.Background(), "user-6", "", CheckoutRequest{ProductID: "plan-b", Confirm: true}); err != nil {
 		t.Fatal(err)
 	}
 	got := grantsOf(t, st, models.SourceStripeSubscription, "sub_g1")
@@ -272,7 +272,7 @@ func TestFirstPlanGroupCheckoutDoesNotSendANilListToTheStore(t *testing.T) {
 func TestPlanSwitchAlsoWorksAgainstTheStrictStore(t *testing.T) {
 	s, _, gw := strictPlanSetup(t)
 	subscribe(t, s, "user-6", "sub_m1", "members-10")
-	res, err := s.Checkout(context.Background(), "user-6", "", CheckoutRequest{ProductID: "members-20"})
+	res, err := s.Checkout(context.Background(), "user-6", "", CheckoutRequest{ProductID: "members-20", Confirm: true})
 	if err != nil || !res.Switched || gw.switched.PriceID != "price_members-20" {
 		t.Errorf("result = %+v err = %v switch = %+v", res, err, gw.switched)
 	}
