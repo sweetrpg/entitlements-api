@@ -33,13 +33,16 @@ var notDeleted = bson.E{Key: "deleted_at", Value: nil}
 func indexSpecs() map[string][]mongo.IndexModel {
 	// MongoDB partial indexes cannot express "deleted_at is absent" ($exists: false is rejected),
 	// so live documents carry live: true, set on insert and removed on soft delete.
-	liveOnly := options.Index().SetUnique(true).
-		SetPartialFilterExpression(bson.D{{Key: "live", Value: true}})
+	// A fresh options value per index: the driver stores the generated index name in the options it
+	// is given, so a shared value would hand every index the first one's name.
+	liveOnly := func() *options.IndexOptions {
+		return options.Index().SetUnique(true).SetPartialFilterExpression(bson.D{{Key: "live", Value: true}})
+	}
 	return map[string][]mongo.IndexModel{
-		constants.KeysCollection:  {{Keys: bson.D{{Key: "key", Value: 1}}, Options: liveOnly}},
-		constants.TiersCollection: {{Keys: bson.D{{Key: "slug", Value: 1}}, Options: liveOnly}},
+		constants.KeysCollection:  {{Keys: bson.D{{Key: "key", Value: 1}}, Options: liveOnly()}},
+		constants.TiersCollection: {{Keys: bson.D{{Key: "slug", Value: 1}}, Options: liveOnly()}},
 		constants.ProductsCollection: {
-			{Keys: bson.D{{Key: "slug", Value: 1}}, Options: liveOnly},
+			{Keys: bson.D{{Key: "slug", Value: 1}}, Options: liveOnly()},
 			{Keys: bson.D{{Key: "stripe_price_id", Value: 1}}},
 		},
 		constants.GrantsCollection: {
