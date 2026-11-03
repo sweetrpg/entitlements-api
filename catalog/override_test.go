@@ -159,3 +159,27 @@ func TestOverrideAuditRecordsActorValuesAndReason(t *testing.T) {
 		t.Errorf("before/after = %v/%v, want 4/12", e.Before, e.After)
 	}
 }
+
+func TestUserAuditIsScopedToTheUserNewestFirstAndPaged(t *testing.T) {
+	s, _ := seedMembers(t)
+	for _, u := range []string{"u1", "u10", "u1", "u2"} {
+		if _, err := s.SetOverride(ctx, "admin1", u, "a.members", OverrideInput{Value: 3.0, Reason: u}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.UserAudit(ctx, "u1", 50, 0)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("entries = %d, err = %v, want 2 (u10 must not match u1)", len(got), err)
+	}
+	if !got[0].At.After(got[1].At) && !got[0].At.Equal(got[1].At) {
+		t.Errorf("not newest first: %v then %v", got[0].At, got[1].At)
+	}
+	if page, _ := s.UserAudit(ctx, "u1", 1, 1); len(page) != 1 {
+		t.Errorf("page = %d, want 1", len(page))
+	}
+	for _, bad := range []string{"", "a/b", "x y", string(make([]byte, 129))} {
+		if _, err := s.UserAudit(ctx, bad, 10, 0); !errors.Is(err, models.ErrInvalid) {
+			t.Errorf("user %q: err = %v, want ErrInvalid", bad, err)
+		}
+	}
+}

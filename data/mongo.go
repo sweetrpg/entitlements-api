@@ -52,7 +52,10 @@ func indexSpecs() map[string][]mongo.IndexModel {
 			{Keys: bson.D{{Key: "refs", Value: 1}}},
 		},
 		constants.StripeCustomersCollection: {{Keys: bson.D{{Key: "user_id", Value: 1}}, Options: options.Index().SetUnique(true)}},
-		constants.AuditCollection:           {{Keys: bson.D{{Key: "at", Value: -1}}}},
+		constants.AuditCollection: {
+			{Keys: bson.D{{Key: "at", Value: -1}}},
+			{Keys: bson.D{{Key: "subject", Value: 1}, {Key: "at", Value: -1}}},
+		},
 	}
 }
 
@@ -357,6 +360,16 @@ func (s *MongoStore) AppendAudit(ctx context.Context, e models.AuditEntry) error
 
 func (s *MongoStore) ListAudit(ctx context.Context, limit, skip int64) ([]models.AuditEntry, error) {
 	return find[models.AuditEntry](ctx, s.db.Collection(constants.AuditCollection), bson.D{}, page("at", -1, limit, skip))
+}
+
+// subjectPrefixFilter matches subjects starting with prefix; the anchored regex can use the
+// subject index.
+func subjectPrefixFilter(prefix string) bson.D {
+	return bson.D{{Key: "subject", Value: bson.D{{Key: "$regex", Value: "^" + regexp.QuoteMeta(prefix)}}}}
+}
+
+func (s *MongoStore) ListAuditBySubjectPrefix(ctx context.Context, prefix string, limit, skip int64) ([]models.AuditEntry, error) {
+	return find[models.AuditEntry](ctx, s.db.Collection(constants.AuditCollection), subjectPrefixFilter(prefix), page("at", -1, limit, skip))
 }
 
 func (s *MongoStore) ListPaidReductions(ctx context.Context, limit, skip int64) ([]models.AuditEntry, error) {

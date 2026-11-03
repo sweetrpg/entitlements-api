@@ -3,12 +3,18 @@ package catalog
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/sweetrpg/common.go/logging"
+	"github.com/sweetrpg/entitlements-api/constants"
 	"github.com/sweetrpg/entitlements-api/models"
 )
+
+// userIDPattern is the shape of a canonical user ID; it never contains the "/" that separates
+// the user from the key in an audit subject.
+var userIDPattern = regexp.MustCompile(`^[A-Za-z0-9._|:@-]{1,128}$`)
 
 // MaxReasonLength caps the free-text reason an administrator gives for a write.
 const MaxReasonLength = 500
@@ -227,6 +233,17 @@ func (s *Service) UserGrants(ctx context.Context, userID string) ([]GrantView, e
 		out[i] = GrantView{Grant: g, Type: types[g.Key]}
 	}
 	return out, nil
+}
+
+// UserAudit lists the audit entries about one user's overrides, newest first.
+func (s *Service) UserAudit(ctx context.Context, userID string, limit, skip int64) ([]models.AuditEntry, error) {
+	if !userIDPattern.MatchString(userID) {
+		return nil, fmt.Errorf("%w: user id must be 1 to 128 letters, digits or . _ | : @ -", models.ErrInvalid)
+	}
+	if limit < 1 || limit > constants.MaxAuditPage {
+		limit = constants.MaxAuditPage
+	}
+	return s.store.ListAuditBySubjectPrefix(ctx, userID+"/", limit, max(skip, 0))
 }
 
 // PaidReductions lists the acknowledged overrides that lowered a paid value, newest first.

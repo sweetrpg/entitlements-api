@@ -115,6 +115,14 @@ func setupAdminOverrideHandlers(a *gin.RouterGroup, svc *catalog.Service) {
 		respond(c, http.StatusOK, vos, err)
 	})
 	a.GET("/users/:user_id/entitlements", func(c *gin.Context) { respondEntitlements(c, svc) })
+	a.GET("/users/:user_id/audit", func(c *gin.Context) {
+		limit, skip := paging(c)
+		entries, err := svc.UserAudit(c.Request.Context(), c.Param("user_id"), limit, skip)
+		if entries == nil {
+			entries = []models.AuditEntry{}
+		}
+		respond(c, http.StatusOK, entries, err)
+	})
 	a.GET("/paid-reductions", func(c *gin.Context) {
 		limit, skip := paging(c)
 		entries, err := svc.PaidReductions(c.Request.Context(), limit, skip)
