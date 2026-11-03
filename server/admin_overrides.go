@@ -65,6 +65,7 @@ func setupAdminOverrideHandlers(a *gin.RouterGroup, svc *catalog.Service) {
 		}
 		respond(c, http.StatusOK, vos, err)
 	})
+	a.GET("/users/:user_id/entitlements", func(c *gin.Context) { respondEntitlements(c, svc) })
 	a.PUT("/users/:user_id/overrides/:key", func(c *gin.Context) {
 		var b overrideBody
 		if c.ShouldBindJSON(&b) != nil {
@@ -103,4 +104,59 @@ func respondOverride(c *gin.Context, svc *catalog.Service, userID, key string) {
 		}
 	}
 	writeError(c, catalog.ErrNotFound)
+}
+
+// TierGrantVO is a tier grant's value for the key being explained.
+type TierGrantVO struct {
+	TierID string `json:"tier_id"`
+	Value  any    `json:"value"`
+	Source string `json:"source"`
+}
+
+// EntitlementVO explains one key for one user. Values are booleans for flags and integers for
+// limits. Paid is the value from payment-sourced grants alone, Payments the grants behind it.
+type EntitlementVO struct {
+	Key        string        `json:"key"`
+	Type       string        `json:"type"`
+	Default    any           `json:"default"`
+	TierGrants []TierGrantVO `json:"tier_grants"`
+	Grants     []GrantVO     `json:"grants"`
+	Override   *GrantVO      `json:"override"`
+	Paid       any           `json:"paid"`
+	Payments   []GrantVO     `json:"payments"`
+	Effective  any           `json:"effective"`
+}
+
+func toEntitlementVO(e catalog.Explanation) EntitlementVO {
+	t := e.Key.Type
+	vo := EntitlementVO{
+		Key: e.Key.Key, Type: string(t), TierGrants: []TierGrantVO{}, Grants: []GrantVO{}, Payments: []GrantVO{},
+		Paid: models.FormatValue(t, e.Paid), Effective: models.FormatValue(t, e.Effective),
+	}
+	if e.Default != nil {
+		vo.Default = models.FormatValue(t, *e.Default)
+	}
+	for _, tg := range e.TierGrants {
+		vo.TierGrants = append(vo.TierGrants, TierGrantVO{TierID: tg.TierID, Value: models.FormatValue(t, tg.Value), Source: tg.Source})
+	}
+	for _, g := range e.KeyGrants {
+		vo.Grants = append(vo.Grants, toGrantVO(catalog.GrantView{Grant: g, Type: t}))
+	}
+	for _, g := range e.Payments {
+		vo.Payments = append(vo.Payments, toGrantVO(catalog.GrantView{Grant: g, Type: t}))
+	}
+	if e.Override != nil {
+		o := toGrantVO(catalog.GrantView{Grant: *e.Override, Type: t})
+		vo.Override = &o
+	}
+	return vo
+}
+
+func respondEntitlements(c *gin.Context, svc *catalog.Service) {
+	list, err := svc.ExplainUser(c.Request.Context(), c.Param("user_id"), c.Query("prefix"))
+	vos := make([]EntitlementVO, len(list))
+	for i, e := range list {
+		vos[i] = toEntitlementVO(e)
+	}
+	respond(c, http.StatusOK, vos, err)
 }

@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/sweetrpg/entitlements-api/models"
 )
 
 const ovPath = "/admin/users/target-user/overrides/initiative.theme_slots"
@@ -57,3 +59,24 @@ func TestOverrideWithoutReasonIsRejectedAndChangesNothing(t *testing.T) {
 }
 
 func ctx() context.Context { return context.Background() }
+
+func TestUserEntitlementsExplainEachKey(t *testing.T) {
+	r, st := seedChecks(t)
+	st.AddGrant(models.Grant{UserID: "target-user", Key: "initiative.theme_slots", Value: 3, Mode: models.ModeAdd, Source: models.SourceStripePurchase, ExternalID: "pi_1", ProductID: "themes", Status: models.GrantActive})
+	mustCode(t, do(r, "PUT", ovPath, adminTok, `{"value":2,"reason":"abuse"}`), http.StatusOK)
+
+	mustCode(t, do(r, "GET", "/admin/users/target-user/entitlements", userTok, ""), http.StatusForbidden)
+	rec := do(r, "GET", "/admin/users/target-user/entitlements?prefix=initiative.theme", adminTok, "")
+	mustCode(t, rec, http.StatusOK)
+	var got []EntitlementVO
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil || len(got) != 1 {
+		t.Fatalf("body = %s", rec.Body)
+	}
+	e := got[0]
+	if e.Default != float64(5) || e.Paid != float64(3) || e.Effective != float64(2) {
+		t.Errorf("default/paid/effective = %v/%v/%v, want 5/3/2", e.Default, e.Paid, e.Effective)
+	}
+	if e.Override == nil || e.Override.Reason != "abuse" || len(e.Payments) != 1 || len(e.Grants) != 1 {
+		t.Errorf("entitlement = %+v", e)
+	}
+}
