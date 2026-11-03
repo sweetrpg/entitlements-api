@@ -1,3 +1,19 @@
+## [0.6.0] - 2026-11-03
+
+### 🚀 Features
+
+- *(resolve)* Add administrator override grant mode
+- *(admin)* Set, remove and list user overrides
+- *(admin)* Explain a user's entitlements with paid values
+- *(admin)* Require acknowledgment to reduce a paid value
+
+### 🐛 Bug Fixes
+
+- *(data)* Give every index its own options value
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Merge master into develop after v0.5.2
 ## [0.5.2] - 2026-10-30
 
 ### 🐛 Bug Fixes
