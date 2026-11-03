@@ -359,6 +359,10 @@ func (s *MongoStore) ListAudit(ctx context.Context, limit, skip int64) ([]models
 	return find[models.AuditEntry](ctx, s.db.Collection(constants.AuditCollection), bson.D{}, page("at", -1, limit, skip))
 }
 
+func (s *MongoStore) ListPaidReductions(ctx context.Context, limit, skip int64) ([]models.AuditEntry, error) {
+	return find[models.AuditEntry](ctx, s.db.Collection(constants.AuditCollection), bson.D{{Key: "paid_reduction", Value: true}}, page("at", -1, limit, skip))
+}
+
 func (s *MongoStore) Ping(ctx context.Context) error { return s.db.Client().Ping(ctx, nil) }
 
 func mapNoDoc(err error) error {

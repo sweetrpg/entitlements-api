@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -44,9 +45,57 @@ func toGrantVO(g catalog.GrantView) GrantVO {
 }
 
 type overrideBody struct {
-	Value      any        `json:"value"`
-	ValidUntil *time.Time `json:"valid_until"`
-	Reason     string     `json:"reason"`
+	Value                    any        `json:"value"`
+	ValidUntil               *time.Time `json:"valid_until"`
+	Reason                   string     `json:"reason"`
+	AcknowledgePaidReduction bool       `json:"acknowledge_paid_reduction"`
+	Reference                string     `json:"reference"`
+}
+
+// PaidReductionVO is the 409 body when an override would lower a value below what the user paid
+// for and the request did not acknowledge it. Values are booleans for flags, integers for limits.
+type PaidReductionVO struct {
+	Error    string    `json:"error"`
+	Message  string    `json:"message"`
+	Key      string    `json:"key"`
+	Paid     any       `json:"paid"`
+	Proposed any       `json:"proposed"`
+	Payments []GrantVO `json:"payments"`
+}
+
+func toPaidReductionVO(e *catalog.PaidReductionError) PaidReductionVO {
+	t := e.Key.Type
+	vo := PaidReductionVO{
+		Error: "paid_reduction_not_acknowledged", Message: e.Error(), Key: e.Key.Key,
+		Paid: models.FormatValue(t, e.Paid), Proposed: models.FormatValue(t, e.Proposed), Payments: []GrantVO{},
+	}
+	for _, g := range e.Payments {
+		vo.Payments = append(vo.Payments, toGrantVO(catalog.GrantView{Grant: g, Type: t}))
+	}
+	return vo
+}
+
+// PaidReductionEntryVO is one acknowledged override that lowered a paid value.
+type PaidReductionEntryVO struct {
+	At            time.Time `json:"at"`
+	Administrator string    `json:"administrator"`
+	UserID        string    `json:"user_id"`
+	Key           string    `json:"key"`
+	Paid          any       `json:"paid"`
+	NewValue      any       `json:"new_value"`
+	Reason        string    `json:"reason"`
+	Reference     string    `json:"reference"`
+}
+
+func toPaidReductionEntryVO(e models.AuditEntry) PaidReductionEntryVO {
+	user, key := e.Subject, ""
+	if i := strings.LastIndex(e.Subject, "/"); i >= 0 {
+		user, key = e.Subject[:i], e.Subject[i+1:]
+	}
+	return PaidReductionEntryVO{
+		At: e.At, Administrator: e.Actor, UserID: user, Key: key, Paid: e.Paid, NewValue: e.After,
+		Reason: e.Reason, Reference: e.Reference,
+	}
 }
 
 type removeOverrideBody struct {
@@ -66,6 +115,15 @@ func setupAdminOverrideHandlers(a *gin.RouterGroup, svc *catalog.Service) {
 		respond(c, http.StatusOK, vos, err)
 	})
 	a.GET("/users/:user_id/entitlements", func(c *gin.Context) { respondEntitlements(c, svc) })
+	a.GET("/paid-reductions", func(c *gin.Context) {
+		limit, skip := paging(c)
+		entries, err := svc.PaidReductions(c.Request.Context(), limit, skip)
+		vos := make([]PaidReductionEntryVO, len(entries))
+		for i, e := range entries {
+			vos[i] = toPaidReductionEntryVO(e)
+		}
+		respond(c, http.StatusOK, vos, err)
+	})
 	a.PUT("/users/:user_id/overrides/:key", func(c *gin.Context) {
 		var b overrideBody
 		if c.ShouldBindJSON(&b) != nil {
@@ -73,7 +131,10 @@ func setupAdminOverrideHandlers(a *gin.RouterGroup, svc *catalog.Service) {
 			return
 		}
 		_, err := svc.SetOverride(c.Request.Context(), authz.Viewer(c), c.Param("user_id"), c.Param("key"),
-			catalog.OverrideInput{Value: b.Value, ValidUntil: b.ValidUntil, Reason: b.Reason})
+			catalog.OverrideInput{
+				Value: b.Value, ValidUntil: b.ValidUntil, Reason: b.Reason,
+				AcknowledgePaidReduction: b.AcknowledgePaidReduction, Reference: b.Reference,
+			})
 		if err != nil {
 			writeError(c, err)
 			return

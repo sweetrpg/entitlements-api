@@ -5,6 +5,7 @@ package config
 import (
 	"errors"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/sweetrpg/entitlements-api/constants"
@@ -20,6 +21,8 @@ type Config struct {
 	CheckoutSuccessURL  string
 	CheckoutCancelURL   string
 	PortalReturnURL     string
+
+	AdminPaidReductionsEnabled bool
 }
 
 // Load reads and validates settings through getenv (os.Getenv in production). Every problem is
@@ -56,6 +59,14 @@ func Load(getenv func(string) string) (*Config, error) {
 		if !absoluteURL(v) {
 			problems = append(problems, name+" must be an absolute http(s) URL")
 		}
+	}
+
+	if v := getenv(constants.ADMIN_PAID_REDUCTIONS_ENABLED); v != "" {
+		on, err := strconv.ParseBool(v)
+		if err != nil {
+			problems = append(problems, constants.ADMIN_PAID_REDUCTIONS_ENABLED+" must be true or false")
+		}
+		cfg.AdminPaidReductionsEnabled = on
 	}
 
 	if getenv("DB_URI") == "" && getenv("DB_HOST") == "" {

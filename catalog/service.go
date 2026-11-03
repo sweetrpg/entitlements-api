@@ -22,16 +22,27 @@ var (
 	ErrDuplicate = data.ErrDuplicate
 	// ErrInUse means the change would orphan something that still depends on the target.
 	ErrInUse = errors.New("in use")
+	// ErrPaidReductionsDisabled means an override would lower a paid value and the deployment
+	// does not allow that (ADMIN_PAID_REDUCTIONS_ENABLED is off).
+	ErrPaidReductionsDisabled = errors.New("reducing a paid value is not enabled")
 )
 
 // Service owns catalog writes and checks.
 type Service struct {
-	store data.Store
-	now   func() time.Time
+	store          data.Store
+	now            func() time.Time
+	paidReductions bool
 }
 
 // New returns a Service over store.
 func New(store data.Store) *Service { return &Service{store: store, now: time.Now} }
+
+// EnablePaidReductions sets whether an acknowledged override may lower a user's value below what
+// they paid for. Off by default; every other override works either way.
+func (s *Service) EnablePaidReductions(on bool) *Service {
+	s.paidReductions = on
+	return s
+}
 
 // KeyInput is the writable part of a key.
 type KeyInput struct {

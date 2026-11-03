@@ -182,8 +182,13 @@ type AuditEntry struct {
 	Subject string             `bson:"subject" json:"subject"`
 	// Reason is the administrator's justification for an override write.
 	Reason string `bson:"reason,omitempty" json:"reason,omitempty"`
-	Before any    `bson:"before,omitempty" json:"before,omitempty"`
-	After  any    `bson:"after,omitempty" json:"after,omitempty"`
+	// PaidReduction marks an override that lowered a user's value below what they paid for;
+	// Paid is that paid value and Reference the administrator's stated cause for it.
+	PaidReduction bool   `bson:"paid_reduction,omitempty" json:"paid_reduction,omitempty"`
+	Paid          any    `bson:"paid,omitempty" json:"paid,omitempty"`
+	Reference     string `bson:"reference,omitempty" json:"reference,omitempty"`
+	Before        any    `bson:"before,omitempty" json:"before,omitempty"`
+	After         any    `bson:"after,omitempty" json:"after,omitempty"`
 }
 
 // ValidateKeyName checks the namespaced key format, e.g. initiative.theme_slots.
