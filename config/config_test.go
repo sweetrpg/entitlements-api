@@ -56,3 +56,19 @@ func TestLoadRejectsMalformedStripeSettingsWithoutEchoingValues(t *testing.T) {
 		}
 	}
 }
+
+func TestPaidReductionsSwitchDefaultsOffAndRejectsGarbage(t *testing.T) {
+	cfg, err := Load(env(valid()))
+	if err != nil || cfg.AdminPaidReductionsEnabled {
+		t.Fatalf("default: cfg = %+v err = %v", cfg, err)
+	}
+	m := valid()
+	m["ADMIN_PAID_REDUCTIONS_ENABLED"] = "true"
+	if cfg, err = Load(env(m)); err != nil || !cfg.AdminPaidReductionsEnabled {
+		t.Fatalf("true: cfg = %+v err = %v", cfg, err)
+	}
+	m["ADMIN_PAID_REDUCTIONS_ENABLED"] = "yes please"
+	if _, err = Load(env(m)); err == nil || !strings.Contains(err.Error(), "ADMIN_PAID_REDUCTIONS_ENABLED") {
+		t.Errorf("err = %v, want it to name the setting", err)
+	}
+}

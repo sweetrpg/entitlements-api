@@ -50,6 +50,12 @@ func identityStub(t *testing.T) *httptest.Server {
 
 func newRouter(t *testing.T) (*gin.Engine, *data.MemoryStore) {
 	t.Helper()
+	return newRouterWith(t, func(*config.Config) {})
+}
+
+// newRouterWith is newRouter with the config adjusted before the handlers are wired.
+func newRouterWith(t *testing.T, adjust func(*config.Config)) (*gin.Engine, *data.MemoryStore) {
+	t.Helper()
 	logging.Init()
 	gin.SetMode(gin.TestMode)
 	st := data.NewMemoryStore()
@@ -57,7 +63,8 @@ func newRouter(t *testing.T) (*gin.Engine, *data.MemoryStore) {
 	cfg := &config.Config{}
 	r := gin.New()
 	cfg.StripeWebhookSecret = webhookSecret
-	cat := catalog.New(st)
+	adjust(cfg)
+	cat := catalog.New(st).EnablePaidReductions(cfg.AdminPaidReductionsEnabled)
 	bill := billing.New(st, fakeStripe{}, cat, billing.URLs{})
 	SetupHandlers(r, cat, bill, authz.NewClient(id.URL, id.URL), cfg)
 	return r, st
@@ -146,7 +153,11 @@ func TestAdminCatalogFlow(t *testing.T) {
 }
 
 func seedChecks(t *testing.T) (*gin.Engine, *data.MemoryStore) {
-	r, st := newRouter(t)
+	return seedChecksWith(t, func(*config.Config) {})
+}
+
+func seedChecksWith(t *testing.T, adjust func(*config.Config)) (*gin.Engine, *data.MemoryStore) {
+	r, st := newRouterWith(t, adjust)
 	for _, b := range []string{
 		`{"key":"initiative.theme_slots","type":"limit","ttl_seconds":60}`,
 		`{"key":"initiative.deluxe","type":"flag"}`,

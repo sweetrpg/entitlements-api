@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
+	"github.com/sweetrpg/entitlements-api/config"
 	"github.com/sweetrpg/entitlements-api/models"
 )
 
@@ -61,9 +63,9 @@ func TestOverrideWithoutReasonIsRejectedAndChangesNothing(t *testing.T) {
 func ctx() context.Context { return context.Background() }
 
 func TestUserEntitlementsExplainEachKey(t *testing.T) {
-	r, st := seedChecks(t)
+	r, st := seedChecksWith(t, func(c *config.Config) { c.AdminPaidReductionsEnabled = true })
 	st.AddGrant(models.Grant{UserID: "target-user", Key: "initiative.theme_slots", Value: 3, Mode: models.ModeAdd, Source: models.SourceStripePurchase, ExternalID: "pi_1", ProductID: "themes", Status: models.GrantActive})
-	mustCode(t, do(r, "PUT", ovPath, adminTok, `{"value":2,"reason":"abuse"}`), http.StatusOK)
+	mustCode(t, do(r, "PUT", ovPath, adminTok, `{"value":2,"reason":"abuse","acknowledge_paid_reduction":true,"reference":"case 3"}`), http.StatusOK)
 
 	mustCode(t, do(r, "GET", "/admin/users/target-user/entitlements", userTok, ""), http.StatusForbidden)
 	rec := do(r, "GET", "/admin/users/target-user/entitlements?prefix=initiative.theme", adminTok, "")
@@ -78,5 +80,56 @@ func TestUserEntitlementsExplainEachKey(t *testing.T) {
 	}
 	if e.Override == nil || e.Override.Reason != "abuse" || len(e.Payments) != 1 || len(e.Grants) != 1 {
 		t.Errorf("entitlement = %+v", e)
+	}
+}
+
+func paidUserRouter(t *testing.T, enabled bool) *gin.Engine {
+	t.Helper()
+	r, st := seedChecksWith(t, func(c *config.Config) { c.AdminPaidReductionsEnabled = enabled })
+	st.AddGrant(models.Grant{UserID: "target-user", Key: "initiative.theme_slots", Value: 5, Mode: models.ModeAdd, Source: models.SourceStripePurchase, ExternalID: "pi_1", ProductID: "themes", Status: models.GrantActive})
+	return r
+}
+
+func TestPaidReductionIsRejectedWithTheFactsUntilAcknowledged(t *testing.T) {
+	r := paidUserRouter(t, true)
+	rec := do(r, "PUT", ovPath, adminTok, `{"value":2,"reason":"abuse"}`)
+	mustCode(t, rec, http.StatusConflict)
+	var vo PaidReductionVO
+	_ = json.Unmarshal(rec.Body.Bytes(), &vo)
+	if vo.Error != "paid_reduction_not_acknowledged" || vo.Paid != float64(5) || vo.Proposed != float64(2) || len(vo.Payments) != 1 || vo.Key != "initiative.theme_slots" {
+		t.Errorf("vo = %+v", vo)
+	}
+	mustCode(t, do(r, "PUT", ovPath, adminTok, `{"value":2,"reason":"abuse","acknowledge_paid_reduction":true}`), http.StatusConflict)
+}
+
+func TestAcknowledgedPaidReductionIsAppliedAndListed(t *testing.T) {
+	r := paidUserRouter(t, true)
+	mustCode(t, do(r, "PUT", ovPath, adminTok, `{"value":2,"reason":"abuse","acknowledge_paid_reduction":true,"reference":"case 12"}`), http.StatusOK)
+
+	rec := do(r, "GET", "/admin/paid-reductions", adminTok, "")
+	mustCode(t, rec, http.StatusOK)
+	var got []PaidReductionEntryVO
+	_ = json.Unmarshal(rec.Body.Bytes(), &got)
+	if len(got) != 1 {
+		t.Fatalf("list = %s", rec.Body)
+	}
+	e := got[0]
+	if e.UserID != "target-user" || e.Key != "initiative.theme_slots" || e.Paid != float64(5) || e.NewValue != float64(2) || e.Reference != "case 12" || e.Administrator != "canonical-"+adminTok {
+		t.Errorf("entry = %+v", e)
+	}
+	mustCode(t, do(r, "GET", "/admin/paid-reductions", userTok, ""), http.StatusForbidden)
+}
+
+func TestPaidReductionIsRefusedWhenTheSwitchIsOffButOtherOverridesWork(t *testing.T) {
+	r := paidUserRouter(t, false)
+	rec := do(r, "PUT", ovPath, adminTok, `{"value":2,"reason":"abuse","acknowledge_paid_reduction":true,"reference":"case 12"}`)
+	mustCode(t, rec, http.StatusForbidden)
+	if !strings.Contains(rec.Body.String(), "paid_reductions_disabled") {
+		t.Errorf("body = %s", rec.Body)
+	}
+	mustCode(t, do(r, "PUT", ovPath, adminTok, `{"value":8,"reason":"gift"}`), http.StatusOK)
+	rec = do(r, "GET", "/admin/paid-reductions", adminTok, "")
+	if strings.TrimSpace(rec.Body.String()) != "[]" {
+		t.Errorf("list = %s", rec.Body)
 	}
 }

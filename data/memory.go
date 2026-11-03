@@ -386,6 +386,18 @@ func (m *MemoryStore) ListAudit(_ context.Context, limit, skip int64) ([]models.
 	return window(out, limit, skip), nil
 }
 
+func (m *MemoryStore) ListPaidReductions(_ context.Context, limit, skip int64) ([]models.AuditEntry, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := []models.AuditEntry{}
+	for _, e := range slices.Backward(m.audit) {
+		if e.PaidReduction {
+			out = append(out, e)
+		}
+	}
+	return window(out, limit, skip), nil
+}
+
 func (m *MemoryStore) Ping(context.Context) error { return nil }
 
 // window applies skip then limit; limit <= 0 means no limit.

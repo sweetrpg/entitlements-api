@@ -22,7 +22,8 @@ value for a subject. Platform-wide design is in `sweetrpg/platform`'s PADR-0034
 | `/admin/keys`, `/admin/tiers`, `/admin/products`, `/admin/default-tier`, `/admin/audit` | admin user token | Catalog writes (audited) and reads |
 | `GET /admin/users/:user_id/grants` | admin user token | The user's active grants and overrides (`:user_id` is the canonical ID). Each item: `tier_id` or `key`, `value`, `mode`, `source`, `product_id`, `quantity`, `override`, `reason`, `set_by`, `valid_until` |
 | `GET /admin/users/:user_id/entitlements?prefix=` | admin user token | Per live key, why the user has the value: `{key, type, default, tier_grants:[{tier_id, value, source}], grants:[grant items], override (grant item or null), paid, payments:[grant items], effective}`. `paid` is the value from `stripe_subscription` and `stripe_purchase` grants alone (default tier and override excluded); `payments` are the grants behind it. Values are booleans for flags, integers for limits |
-| `PUT /admin/users/:user_id/overrides/:key` | admin user token | `{value, valid_until?, reason}` sets or replaces the user's override for the key (`value` is a boolean for a flag, a non-negative integer for a limit; `reason` is required, 500 characters at most). Returns the override as above. 400 `invalid_request`, 404 `unknown_key` |
+| `PUT /admin/users/:user_id/overrides/:key` | admin user token | `{value, valid_until?, reason}` sets or replaces the user's override for the key (`value` is a boolean for a flag, a non-negative integer for a limit; `reason` is required, 500 characters at most). Returns the override as above. 400 `invalid_request`, 404 `unknown_key`. An override that would put the effective value below the paid value is 409 `paid_reduction_not_acknowledged` `{error, message, key, paid, proposed, payments:[grant items]}` unless the body also has `"acknowledge_paid_reduction": true` and a non-empty `reference`; an acknowledged one is applied and its audit entry is flagged `paid_reduction` with the `reference` and `paid` value. 403 `paid_reductions_disabled` when `ADMIN_PAID_REDUCTIONS_ENABLED` is off |
+| `GET /admin/paid-reductions?limit=&skip=` | admin user token | Acknowledged overrides that lowered a paid value, newest first: `[{at, administrator, user_id, key, paid, new_value, reason, reference}]` |
 | `DELETE /admin/users/:user_id/overrides/:key` | admin user token | `{reason}` (required) ends the override and restores the computed value. 204; 404 `not_found` when the user has none |
 | `GET /status/ping`, `GET /status/health` | none | Liveness, dependency check |
 
@@ -172,6 +173,8 @@ price ID (a lookup key, say) surfaces here.
 | --- | --- | --- |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | `api-stripe` Secret | Required; startup fails naming the missing one |
 | `STRIPE_CHECKOUT_SUCCESS_URL`, `STRIPE_CHECKOUT_CANCEL_URL`, `STRIPE_PORTAL_RETURN_URL` | ConfigMap | Required absolute http(s) URLs |
+
+| `ADMIN_PAID_REDUCTIONS_ENABLED` | ConfigMap | Optional, default `false`. While false, an override that would lower a value below the paid value is rejected even when acknowledged (`403 paid_reductions_disabled`); every other override works. Set `true` in dev |
 
 See `.env.example` for the rest.
 

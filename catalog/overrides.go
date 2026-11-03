@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sweetrpg/common.go/logging"
 	"github.com/sweetrpg/entitlements-api/models"
 )
 
@@ -18,6 +19,23 @@ type OverrideInput struct {
 	Value      any
 	ValidUntil *time.Time
 	Reason     string
+	// AcknowledgePaidReduction and Reference are both required to lower the value below what the
+	// user paid for: the administrator confirms the reduction affects a purchase and says why.
+	AcknowledgePaidReduction bool
+	Reference                string
+}
+
+// PaidReductionError rejects an override that would lower a value below its paid value without
+// acknowledgment. Paid and Proposed are in stored units (a flag is 0 or 1).
+type PaidReductionError struct {
+	Key      models.Key
+	Paid     int64
+	Proposed int64
+	Payments []models.Grant
+}
+
+func (e *PaidReductionError) Error() string {
+	return fmt.Sprintf("override of %s would reduce the paid value %d to %d; acknowledge the paid reduction with a reference to apply it", e.Key.Key, e.Paid, e.Proposed)
 }
 
 // overrideExternalID makes (source, external_id, key) unique per user and key, so setting an
@@ -71,6 +89,10 @@ func (s *Service) SetOverride(ctx context.Context, actor, userID, key string, in
 	if err != nil {
 		return nil, err
 	}
+	reduced, err := s.checkPaidReduction(ctx, userID, keys[0], value, in)
+	if err != nil {
+		return nil, err
+	}
 
 	g, err := s.upsertOverride(ctx, actor, userID, key, value, in.ValidUntil, reason)
 	if err != nil {
@@ -80,7 +102,33 @@ func (s *Service) SetOverride(ctx context.Context, actor, userID, key string, in
 	if err != nil {
 		return nil, err
 	}
-	return g, s.auditOverride(ctx, actor, "set", userID, key, reason, before, after)
+	entry := models.AuditEntry{Reason: reason, Before: before, After: after}
+	if reduced != nil {
+		entry.PaidReduction, entry.Paid, entry.Reference = true, models.FormatValue(keys[0].Type, *reduced), strings.TrimSpace(in.Reference)
+	}
+	return g, s.auditOverride(ctx, actor, "set", userID, key, entry)
+}
+
+// checkPaidReduction returns the paid value when value would lower the user's effective value
+// below it (nil when it would not), or an error when that reduction is not allowed.
+func (s *Service) checkPaidReduction(ctx context.Context, userID string, k models.Key, value int64, in OverrideInput) (*int64, error) {
+	u, err := s.loadUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	paid, payments := u.paid(k)
+	paid = clamp(k, paid)
+	proposed := clamp(k, value)
+	if len(payments) == 0 || proposed >= paid {
+		return nil, nil
+	}
+	if !in.AcknowledgePaidReduction || strings.TrimSpace(in.Reference) == "" {
+		return nil, &PaidReductionError{Key: k, Paid: paid, Proposed: proposed, Payments: payments}
+	}
+	if !s.paidReductions {
+		return nil, ErrPaidReductionsDisabled
+	}
+	return &paid, nil
 }
 
 func (s *Service) upsertOverride(ctx context.Context, actor, userID, key string, value int64, until *time.Time, reason string) (*models.Grant, error) {
@@ -140,7 +188,7 @@ func (s *Service) RemoveOverride(ctx context.Context, actor, userID, key, reason
 		if err != nil {
 			return err
 		}
-		return s.auditOverride(ctx, actor, "remove", userID, key, reason, before, after)
+		return s.auditOverride(ctx, actor, "remove", userID, key, models.AuditEntry{Reason: reason, Before: before, After: after})
 	}
 	return ErrNotFound
 }
@@ -181,6 +229,11 @@ func (s *Service) UserGrants(ctx context.Context, userID string) ([]GrantView, e
 	return out, nil
 }
 
+// PaidReductions lists the acknowledged overrides that lowered a paid value, newest first.
+func (s *Service) PaidReductions(ctx context.Context, limit, skip int64) ([]models.AuditEntry, error) {
+	return s.store.ListPaidReductions(ctx, limit, skip)
+}
+
 // effective returns the clamped effective value of one key, rendered per key type.
 func (s *Service) effective(ctx context.Context, userID string, k models.Key) (any, error) {
 	r, err := s.resolveKeys(ctx, userID, []string{k.Key}, []models.Key{k})
@@ -190,6 +243,10 @@ func (s *Service) effective(ctx context.Context, userID string, k models.Key) (a
 	return models.FormatValue(k.Type, r[0].Value), nil
 }
 
-func (s *Service) auditOverride(ctx context.Context, actor, action, userID, key, reason string, before, after any) error {
-	return s.auditWithReason(ctx, actor, action, "override", userID+"/"+key, reason, before, after)
+func (s *Service) auditOverride(ctx context.Context, actor, action, userID, key string, e models.AuditEntry) error {
+	e.At, e.Actor, e.Action, e.Kind, e.Subject = s.now().UTC(), actor, action, "override", userID+"/"+key
+	if err := s.store.AppendAudit(ctx, e); err != nil {
+		logging.Logger.Error("catalog audit entry not recorded", "action", action, "kind", "override", "subject", e.Subject, "actor", actor, "error", err.Error())
+	}
+	return nil
 }

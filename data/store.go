@@ -75,5 +75,8 @@ type Store interface {
 	// ListAudit returns entries newest first.
 	ListAudit(ctx context.Context, limit, skip int64) ([]models.AuditEntry, error)
 
+	// ListPaidReductions returns the audit entries flagged as paid reductions, newest first.
+	ListPaidReductions(ctx context.Context, limit, skip int64) ([]models.AuditEntry, error)
+
 	Ping(ctx context.Context) error
 }

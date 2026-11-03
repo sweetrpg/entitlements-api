@@ -22,3 +22,4 @@ data:
   STRIPE_CHECKOUT_SUCCESS_URL: https://dev.sweetrpg.com/
   STRIPE_CHECKOUT_CANCEL_URL: https://dev.sweetrpg.com/
   STRIPE_PORTAL_RETURN_URL: https://dev.sweetrpg.com/
+  ADMIN_PAID_REDUCTIONS_ENABLED: "true"
