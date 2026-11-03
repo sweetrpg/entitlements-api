@@ -453,3 +453,53 @@ func TestPortalNeedsAnExistingCustomer(t *testing.T) {
 		t.Errorf("portal = %q %q", gw.portalCust, gw.portalBack)
 	}
 }
+
+func TestPurchaseRecordsWhenAndWhatWasCharged(t *testing.T) {
+	s, st, _ := setup(t)
+	apply(t, s, "checkout_payment.json")
+	g := grant(t, st, models.SourceStripePurchase, "pi_1")
+	if g.PurchasedAt == nil || g.PurchasedAt.Unix() != 1789990000 || g.FirstPurchasedAt == nil || g.FirstPurchasedAt.Unix() != 1789990000 {
+		t.Errorf("purchased_at = %v, first = %v", g.PurchasedAt, g.FirstPurchasedAt)
+	}
+	if g.Amount == nil || *g.Amount != 4900 || g.Currency != "usd" {
+		t.Errorf("amount = %v %q, want 4900 usd", g.Amount, g.Currency)
+	}
+}
+
+func TestRenewalUpdatesTheLatestChargeAndKeepsTheFirstPurchaseDate(t *testing.T) {
+	s, st, _ := setup(t)
+	apply(t, s, "checkout_subscription.json", "invoice_paid.json")
+	g := grant(t, st, models.SourceStripeSubscription, "sub_1")
+	if g.PurchasedAt.Unix() != 1790000010 || *g.Amount != 1500 {
+		t.Fatalf("after first invoice: purchased_at = %v amount = %d (paid_at wins over created)", g.PurchasedAt, *g.Amount)
+	}
+
+	apply(t, s, "invoice_renewed.json")
+	g = grant(t, st, models.SourceStripeSubscription, "sub_1")
+	if g.PurchasedAt.Unix() != 1792592000 || *g.Amount != 1600 {
+		t.Errorf("after renewal: purchased_at = %v amount = %d, want the renewal's", g.PurchasedAt, *g.Amount)
+	}
+	if g.FirstPurchasedAt.Unix() != 1789990000 {
+		t.Errorf("first_purchased_at = %v, want the checkout's", g.FirstPurchasedAt)
+	}
+
+	apply(t, s, "invoice_older.json")
+	g = grant(t, st, models.SourceStripeSubscription, "sub_1")
+	if g.PurchasedAt.Unix() != 1792592000 || *g.Amount != 1600 {
+		t.Errorf("an older invoice replaced the latest charge: %v %d", g.PurchasedAt, *g.Amount)
+	}
+}
+
+func TestEveryGrantOfABundleCarriesTheWholeCharge(t *testing.T) {
+	s, _, st, _ := productSetup(t)
+	apply(t, s, "product_bundle_checkout.json")
+	grants := grantsOf(t, st, models.SourceStripePurchase, "pi_b1")
+	if len(grants) != 3 {
+		t.Fatalf("grants = %d, want the 3 of the bundle", len(grants))
+	}
+	for key, g := range grants {
+		if g.Amount == nil || *g.Amount != 2500 || g.Currency != "eur" {
+			t.Errorf("%s: amount = %v %q, want 2500 eur", key, g.Amount, g.Currency)
+		}
+	}
+}
