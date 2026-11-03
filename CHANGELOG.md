@@ -1,3 +1,16 @@
+## [0.8.0] - 2026-11-03
+
+### 🚀 Features
+
+- *(billing)* Record the charge behind payment grants
+
+### 🐛 Bug Fixes
+
+- *(ci)* Limit the debug workflow token to read access
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Merge master into develop after v0.7.0
 ## [0.7.0] - 2026-11-03
 
 ### 🚀 Features
