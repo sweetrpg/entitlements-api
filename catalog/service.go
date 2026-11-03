@@ -64,8 +64,13 @@ func validateTTL(ttl int) error {
 // ERROR and the write still reports success. Upgrade path: wrap both in a Mongo transaction if
 // lost entries ever matter.
 func (s *Service) audit(ctx context.Context, actor, action, kind, subject string, before, after any) error {
+	return s.auditWithReason(ctx, actor, action, kind, subject, "", before, after)
+}
+
+// auditWithReason is audit with the administrator's reason recorded on the entry.
+func (s *Service) auditWithReason(ctx context.Context, actor, action, kind, subject, reason string, before, after any) error {
 	err := s.store.AppendAudit(ctx, models.AuditEntry{
-		At: s.now().UTC(), Actor: actor, Action: action, Kind: kind, Subject: subject, Before: before, After: after,
+		At: s.now().UTC(), Actor: actor, Action: action, Kind: kind, Subject: subject, Reason: reason, Before: before, After: after,
 	})
 	if err != nil {
 		logging.Logger.Error("catalog audit entry not recorded", "action", action, "kind", kind, "subject", subject, "actor", actor, "error", err.Error())

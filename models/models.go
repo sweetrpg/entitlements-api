@@ -180,8 +180,10 @@ type AuditEntry struct {
 	Action  string             `bson:"action" json:"action"`
 	Kind    string             `bson:"kind" json:"kind"`
 	Subject string             `bson:"subject" json:"subject"`
-	Before  any                `bson:"before,omitempty" json:"before,omitempty"`
-	After   any                `bson:"after,omitempty" json:"after,omitempty"`
+	// Reason is the administrator's justification for an override write.
+	Reason string `bson:"reason,omitempty" json:"reason,omitempty"`
+	Before any    `bson:"before,omitempty" json:"before,omitempty"`
+	After  any    `bson:"after,omitempty" json:"after,omitempty"`
 }
 
 // ValidateKeyName checks the namespaced key format, e.g. initiative.theme_slots.

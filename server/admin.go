@@ -127,6 +127,7 @@ func setupAdminHandlers(g *gin.Engine, svc *catalog.Service, client *authz.Clien
 	})
 
 	setupAdminProductHandlers(a, svc)
+	setupAdminOverrideHandlers(a, svc)
 
 	a.GET("/default-tier", func(c *gin.Context) {
 		id, err := svc.DefaultTier(c.Request.Context())
