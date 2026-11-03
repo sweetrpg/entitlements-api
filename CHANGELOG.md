@@ -1,3 +1,12 @@
+## [0.7.0] - 2026-11-03
+
+### 🚀 Features
+
+- *(admin)* List a user's override audit entries
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Merge master into develop after v0.6.0
 ## [0.6.0] - 2026-11-03
 
 ### 🚀 Features
