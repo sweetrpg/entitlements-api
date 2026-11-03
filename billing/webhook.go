@@ -68,6 +68,31 @@ type purchase struct {
 	quantity   int64
 	validUntil *time.Time
 	refs       []string
+	// payment is the charge behind the event; nil when the event carries none.
+	payment *payment
+}
+
+// payment is what a customer was charged and when. Amount is in minor units.
+type payment struct {
+	at       time.Time
+	amount   int64
+	currency string
+}
+
+func newPayment(unix, amount int64, currency string) *payment {
+	if unix <= 0 {
+		return nil
+	}
+	return &payment{at: time.Unix(unix, 0).UTC(), amount: amount, currency: currency}
+}
+
+// applyTo records the payment as the grant's latest. An older charge never replaces a newer one.
+func (c *payment) applyTo(g *models.Grant) {
+	if c == nil || (g.PurchasedAt != nil && c.at.Before(*g.PurchasedAt)) {
+		return
+	}
+	at, amount := c.at, c.amount
+	g.PurchasedAt, g.Amount, g.Currency = &at, &amount, c.currency
 }
 
 func (s *Service) onCheckout(ctx context.Context, raw json.RawMessage) error {
@@ -94,7 +119,7 @@ func (s *Service) onCheckout(ctx context.Context, raw json.RawMessage) error {
 	qty, _ := strconv.ParseInt(cs.Metadata["quantity"], 10, 64)
 	p := purchase{
 		userID: user, tierID: cs.Metadata["tier_id"], productID: cs.Metadata["product_id"],
-		quantity: max(qty, 1), refs: nonEmpty(cs.ID),
+		quantity: max(qty, 1), refs: nonEmpty(cs.ID), payment: newPayment(cs.Created, cs.AmountTotal, cs.Currency),
 	}
 	switch cs.Mode {
 	case "subscription":
@@ -123,6 +148,7 @@ func (s *Service) onInvoicePaid(ctx context.Context, raw json.RawMessage) error 
 		source: models.SourceStripeSubscription, externalID: sub,
 		userID: meta["user_id"], tierID: meta["tier_id"], productID: meta["product_id"],
 		quantity: inv.quantity(), refs: nonEmpty(inv.ID, inv.PaymentIntent, inv.Charge),
+		payment: newPayment(inv.paidAt(), inv.AmountPaid, inv.Currency),
 	}
 	if end := inv.periodEnd(); end > 0 {
 		t := time.Unix(end, 0).UTC()
@@ -304,6 +330,11 @@ func (s *Service) wanted(ctx context.Context, p purchase) ([]models.Grant, error
 		UserID: p.userID, Source: p.source, ExternalID: p.externalID,
 		ValidUntil: p.validUntil, Refs: p.refs, Status: models.GrantActive,
 	}
+	p.payment.applyTo(&base)
+	if base.PurchasedAt != nil {
+		first := *base.PurchasedAt
+		base.FirstPurchasedAt = &first
+	}
 	switch {
 	case p.productID != "":
 		products, err := s.store.GetProducts(ctx, []string{p.productID})
@@ -386,6 +417,7 @@ func (s *Service) mergeGrant(ctx context.Context, cur *models.Grant, p purchase)
 	if p.validUntil != nil && (cur.ValidUntil == nil || p.validUntil.After(*cur.ValidUntil)) {
 		cur.ValidUntil = p.validUntil
 	}
+	p.payment.applyTo(cur)
 	for _, r := range p.refs {
 		if !slices.Contains(cur.Refs, r) {
 			cur.Refs = append(cur.Refs, r)

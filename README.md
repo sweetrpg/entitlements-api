@@ -20,7 +20,7 @@ value for a subject. Platform-wide design is in `sweetrpg/platform`'s PADR-0034
 | `POST /billing/portal` | user token | `{url}` for the Stripe billing portal; 404 if the caller never checked out |
 | `POST /webhooks/stripe` | Stripe signature | Public. Verified against the raw body; no user token |
 | `/admin/keys`, `/admin/tiers`, `/admin/products`, `/admin/default-tier`, `/admin/audit` | admin user token | Catalog writes (audited) and reads |
-| `GET /admin/users/:user_id/grants` | admin user token | The user's active grants and overrides (`:user_id` is the canonical ID). Each item: `tier_id` or `key`, `value`, `mode`, `source`, `product_id`, `quantity`, `override`, `reason`, `set_by`, `valid_until` |
+| `GET /admin/users/:user_id/grants` | admin user token | The user's active grants and overrides (`:user_id` is the canonical ID). Each item: `tier_id` or `key`, `value`, `mode`, `source`, `product_id`, `quantity`, `override`, `reason`, `set_by`, `valid_until`, `created_at`, and for payment grants `purchased_at`, `first_purchased_at`, `amount` (integer minor units), `currency` (see Payment details below) |
 | `GET /admin/users/:user_id/entitlements?prefix=` | admin user token | Per live key, why the user has the value: `{key, type, default, tier_grants:[{tier_id, value, source}], grants:[grant items], override (grant item or null), paid, payments:[grant items], effective}`. `paid` is the value from `stripe_subscription` and `stripe_purchase` grants alone (default tier and override excluded); `payments` are the grants behind it. Values are booleans for flags, integers for limits |
 | `PUT /admin/users/:user_id/overrides/:key` | admin user token | `{value, valid_until?, reason}` sets or replaces the user's override for the key (`value` is a boolean for a flag, a non-negative integer for a limit; `reason` is required, 500 characters at most). Returns the override as above. 400 `invalid_request`, 404 `unknown_key`. An override that would put the effective value below the paid value is 409 `paid_reduction_not_acknowledged` `{error, message, key, paid, proposed, payments:[grant items]}` unless the body also has `"acknowledge_paid_reduction": true` and a non-empty `reference`; an acknowledged one is applied and its audit entry is flagged `paid_reduction` with the `reference` and `paid` value. 403 `paid_reductions_disabled` when `ADMIN_PAID_REDUCTIONS_ENABLED` is off |
 | `GET /admin/users/:user_id/audit?limit=&skip=` | admin user token | Audit entries about the user's overrides (subject `<user_id>/<key>`), newest first, at most 200 per request: `[{at, actor, action, kind, subject, reason, paid_reduction, paid, reference, before, after}]`. 400 `invalid_request` for a malformed user ID |
@@ -31,6 +31,17 @@ value for a subject. Platform-wide design is in `sweetrpg/platform`'s PADR-0034
 Check responses: `{key, type, value, ttl_seconds}` plus `Cache-Control: private, max-age=<ttl>`.
 `value` is a boolean for flags and an integer for limits. An unknown key returns 404 and fails a
 whole batch. A batch with both or neither of `key`/`prefix` returns 400 `invalid_selector`; more than 200 keys returns `too_many_keys`; a prefix over 128 characters returns `prefix_too_long`. Usage against a limit is the caller's to count.
+
+## Payment details on grants
+
+A payment-sourced grant records the latest charge behind it: `purchased_at` (RFC 3339), `amount`
+(integer minor units actually charged, from `checkout.session.completed` `amount_total` or
+`invoice.paid` `amount_paid`) and `currency`. A renewal replaces them; an older invoice never
+does. `first_purchased_at` stays the first charge. A bundle repeats the whole charge on each of
+its grants, so do not sum `amount` across grants of one purchase (`payments` entries with the
+same `product_id` and `purchased_at`). Grants made before this was recorded return these fields as
+`null` (`currency` omitted); they fill in on the next renewal event, and there is no backfill from
+Stripe. The same items appear in the `payments` list of a `paid_reduction_not_acknowledged` 409.
 
 ## Resolution
 

@@ -25,12 +25,20 @@ type GrantVO struct {
 	Reason     string     `json:"reason,omitempty"`
 	SetBy      string     `json:"set_by,omitempty"`
 	ValidUntil *time.Time `json:"valid_until,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+	// Payment grants only; null for grants made before the charge was recorded. Amount is in
+	// minor units of Currency, the whole charge of the purchase or latest renewal.
+	PurchasedAt      *time.Time `json:"purchased_at"`
+	FirstPurchasedAt *time.Time `json:"first_purchased_at"`
+	Amount           *int64     `json:"amount"`
+	Currency         string     `json:"currency,omitempty"`
 }
 
 func toGrantVO(g catalog.GrantView) GrantVO {
 	vo := GrantVO{
 		TierID: g.TierID, Key: g.Key, Mode: g.Mode, Source: g.Source, ProductID: g.ProductID,
 		Quantity: g.Quantity, Override: g.Mode == models.ModeOverride, Reason: g.Reason, ValidUntil: g.ValidUntil,
+		CreatedAt: g.CreatedAt, PurchasedAt: g.PurchasedAt, FirstPurchasedAt: g.FirstPurchasedAt, Amount: g.Amount, Currency: g.Currency,
 	}
 	if g.Key != "" {
 		vo.Value = models.FormatValue(g.Type, g.Value)

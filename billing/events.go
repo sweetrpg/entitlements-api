@@ -13,6 +13,9 @@ type checkoutSession struct {
 	Subscription      string            `json:"subscription"`
 	PaymentIntent     string            `json:"payment_intent"`
 	ClientReferenceID string            `json:"client_reference_id"`
+	Created           int64             `json:"created"`
+	AmountTotal       int64             `json:"amount_total"`
+	Currency          string            `json:"currency"`
 	Metadata          map[string]string `json:"metadata"`
 }
 
@@ -22,10 +25,16 @@ type subscriptionDetails struct {
 }
 
 type invoice struct {
-	ID                  string               `json:"id"`
-	Subscription        string               `json:"subscription"`
-	PaymentIntent       string               `json:"payment_intent"`
-	Charge              string               `json:"charge"`
+	ID                string `json:"id"`
+	Subscription      string `json:"subscription"`
+	PaymentIntent     string `json:"payment_intent"`
+	Charge            string `json:"charge"`
+	Created           int64  `json:"created"`
+	AmountPaid        int64  `json:"amount_paid"`
+	Currency          string `json:"currency"`
+	StatusTransitions struct {
+		PaidAt int64 `json:"paid_at"`
+	} `json:"status_transitions"`
 	SubscriptionDetails *subscriptionDetails `json:"subscription_details"`
 	Parent              *struct {
 		SubscriptionDetails *subscriptionDetails `json:"subscription_details"`
@@ -59,6 +68,14 @@ func (i invoice) details() (subscription string, metadata map[string]string) {
 		}
 	}
 	return subscription, metadata
+}
+
+// paidAt is when the invoice was paid, falling back to its creation; 0 if neither is known.
+func (i invoice) paidAt() int64 {
+	if i.StatusTransitions.PaidAt > 0 {
+		return i.StatusTransitions.PaidAt
+	}
+	return i.Created
 }
 
 // quantity is the first line's quantity, 1 if absent.
