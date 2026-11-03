@@ -105,10 +105,18 @@ type Grant struct {
 	Reason string `bson:"reason,omitempty"`
 	// Refs are other Stripe object IDs (invoice, payment intent, charge) a refund or dispute
 	// event can name instead of ExternalID.
-	Refs            []string   `bson:"refs,omitempty"`
-	Status          string     `bson:"status"`
-	ValidUntil      *time.Time `bson:"valid_until,omitempty"`
-	mcore.Auditable `bson:",inline"`
+	Refs []string `bson:"refs,omitempty"`
+	// PurchasedAt, Amount and Currency describe the latest charge behind a payment-sourced grant
+	// (a renewal replaces them); FirstPurchasedAt is the first one. Amount is in minor units and is
+	// the whole charge of the purchase, repeated on every grant a bundle makes. Grants made before
+	// these were recorded have none.
+	PurchasedAt      *time.Time `bson:"purchased_at,omitempty"`
+	FirstPurchasedAt *time.Time `bson:"first_purchased_at,omitempty"`
+	Amount           *int64     `bson:"amount,omitempty"`
+	Currency         string     `bson:"currency,omitempty"`
+	Status           string     `bson:"status"`
+	ValidUntil       *time.Time `bson:"valid_until,omitempty"`
+	mcore.Auditable  `bson:",inline"`
 }
 
 // ActiveAt reports whether the grant counts at now. The Mongo query in data.MongoStore applies

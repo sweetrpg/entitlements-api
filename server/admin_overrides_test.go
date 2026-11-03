@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sweetrpg/entitlements-api/config"
@@ -151,4 +152,48 @@ func TestUserAuditRoute(t *testing.T) {
 		t.Errorf("entries = %+v", got)
 	}
 	mustCode(t, do(r, "GET", "/admin/users/bad%20id/audit", adminTok, ""), http.StatusBadRequest)
+}
+
+func TestPaymentGrantsCarryPurchaseDetailsInReadsAnd409(t *testing.T) {
+	r, st := seedChecksWith(t, func(c *config.Config) { c.AdminPaidReductionsEnabled = true })
+	bought := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	first := bought.AddDate(0, -2, 0)
+	amount := int64(1500)
+	g := models.Grant{UserID: "target-user", Key: "initiative.theme_slots", Value: 5, Mode: models.ModeAdd, Source: models.SourceStripePurchase, ExternalID: "pi_1", ProductID: "themes", Status: models.GrantActive,
+		PurchasedAt: &bought, FirstPurchasedAt: &first, Amount: &amount, Currency: "usd"}
+	g.CreatedAt = first
+	st.AddGrant(g)
+	// a grant from before the details were recorded stays readable, with nulls
+	st.AddGrant(models.Grant{UserID: "target-user", Key: "initiative.theme_slots", Value: 1, Mode: models.ModeAdd, Source: models.SourceStripePurchase, ExternalID: "pi_old", Status: models.GrantActive})
+
+	check := func(label string, payments []GrantVO) {
+		t.Helper()
+		var withDetails, without int
+		for _, p := range payments {
+			switch {
+			case p.Amount != nil && *p.Amount == 1500 && p.Currency == "usd" && p.PurchasedAt.Equal(bought) && p.FirstPurchasedAt.Equal(first) && p.CreatedAt.Equal(first):
+				withDetails++
+			case p.Amount == nil && p.PurchasedAt == nil && p.FirstPurchasedAt == nil && p.Currency == "":
+				without++
+			}
+		}
+		if withDetails != 1 || without != 1 {
+			t.Errorf("%s: payments = %+v", label, payments)
+		}
+	}
+
+	rec := do(r, "GET", "/admin/users/target-user/entitlements?prefix=initiative.theme", adminTok, "")
+	mustCode(t, rec, http.StatusOK)
+	var got []EntitlementVO
+	_ = json.Unmarshal(rec.Body.Bytes(), &got)
+	check("entitlements", got[0].Payments)
+	if !strings.Contains(rec.Body.String(), `"amount":null`) {
+		t.Errorf("legacy grant should show amount null: %s", rec.Body)
+	}
+
+	rec = do(r, "PUT", ovPath, adminTok, `{"value":1,"reason":"r"}`)
+	mustCode(t, rec, http.StatusConflict)
+	var vo PaidReductionVO
+	_ = json.Unmarshal(rec.Body.Bytes(), &vo)
+	check("409", vo.Payments)
 }
