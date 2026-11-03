@@ -101,6 +101,8 @@ type Grant struct {
 	// Mode is ModeAdd or ModeAtLeast for a key-level limit grant; empty means add.
 	Mode     string `bson:"mode,omitempty"`
 	Quantity int64  `bson:"quantity,omitempty"`
+	// Reason is the administrator's free-text justification; set on override grants only.
+	Reason string `bson:"reason,omitempty"`
 	// Refs are other Stripe object IDs (invoice, payment intent, charge) a refund or dispute
 	// event can name instead of ExternalID.
 	Refs            []string   `bson:"refs,omitempty"`
@@ -120,6 +122,9 @@ func (g Grant) ActiveAt(now time.Time) bool {
 const (
 	ModeAdd     = "add"
 	ModeAtLeast = "at_least"
+	// ModeOverride marks an administrator override: while active it replaces the computed value
+	// of its key (still clamped to the key maximum). At most one per user and key.
+	ModeOverride = "override"
 )
 
 // Billing kinds for a product.

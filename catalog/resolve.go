@@ -11,7 +11,7 @@ import (
 //	effective = max(default tier, tier grants, at_least grants) + sum(add grants)
 //
 // for a limit key; a flag key is on when its tier-derived value is on or any key-level grant is
-// active. Tiers and at_least grants are alternatives (maximum); purchased add units stack. types says which keys are
+// active. An active override replaces the result for its key. Tiers and at_least grants are alternatives (maximum); purchased add units stack. types says which keys are
 // flags, any key not listed is treated as a limit. A key with no source is absent from the map
 // (read as zero or false). Grants are re-checked for activity at now so the rule holds for any
 // Store.
@@ -28,6 +28,7 @@ func Resolve(def *models.Tier, tiers map[string]models.Tier, grants []models.Gra
 		}
 	}
 	units := map[string]int64{}
+	overrides := map[string]int64{}
 	for _, g := range grants {
 		if !g.ActiveAt(now) {
 			continue
@@ -41,6 +42,8 @@ func Resolve(def *models.Tier, tiers map[string]models.Tier, grants []models.Gra
 			continue
 		}
 		switch {
+		case g.Mode == models.ModeOverride:
+			overrides[g.Key] = g.Value
 		case types[g.Key] == models.TypeFlag:
 			units[g.Key] = 1
 		case g.Mode == models.ModeAtLeast:
@@ -57,6 +60,9 @@ func Resolve(def *models.Tier, tiers map[string]models.Tier, grants []models.Gra
 		} else {
 			out[key] += add
 		}
+	}
+	for key, v := range overrides {
+		out[key] = v
 	}
 	return out
 }
