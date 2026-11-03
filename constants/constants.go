@@ -23,6 +23,10 @@ const (
 	STRIPE_CHECKOUT_SUCCESS_URL = "STRIPE_CHECKOUT_SUCCESS_URL"
 	STRIPE_CHECKOUT_CANCEL_URL  = "STRIPE_CHECKOUT_CANCEL_URL"
 	STRIPE_PORTAL_RETURN_URL    = "STRIPE_PORTAL_RETURN_URL"
+
+	// ADMIN_PAID_REDUCTIONS_ENABLED (default false) lets an administrator override lower a user's
+	// value below what they paid for. Off, even an acknowledged reduction is rejected.
+	ADMIN_PAID_REDUCTIONS_ENABLED = "ADMIN_PAID_REDUCTIONS_ENABLED"
 )
 
 // Value constants

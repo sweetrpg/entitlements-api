@@ -33,13 +33,16 @@ var notDeleted = bson.E{Key: "deleted_at", Value: nil}
 func indexSpecs() map[string][]mongo.IndexModel {
 	// MongoDB partial indexes cannot express "deleted_at is absent" ($exists: false is rejected),
 	// so live documents carry live: true, set on insert and removed on soft delete.
-	liveOnly := options.Index().SetUnique(true).
-		SetPartialFilterExpression(bson.D{{Key: "live", Value: true}})
+	// A fresh options value per index: the driver stores the generated index name in the options it
+	// is given, so a shared value would hand every index the first one's name.
+	liveOnly := func() *options.IndexOptions {
+		return options.Index().SetUnique(true).SetPartialFilterExpression(bson.D{{Key: "live", Value: true}})
+	}
 	return map[string][]mongo.IndexModel{
-		constants.KeysCollection:  {{Keys: bson.D{{Key: "key", Value: 1}}, Options: liveOnly}},
-		constants.TiersCollection: {{Keys: bson.D{{Key: "slug", Value: 1}}, Options: liveOnly}},
+		constants.KeysCollection:  {{Keys: bson.D{{Key: "key", Value: 1}}, Options: liveOnly()}},
+		constants.TiersCollection: {{Keys: bson.D{{Key: "slug", Value: 1}}, Options: liveOnly()}},
 		constants.ProductsCollection: {
-			{Keys: bson.D{{Key: "slug", Value: 1}}, Options: liveOnly},
+			{Keys: bson.D{{Key: "slug", Value: 1}}, Options: liveOnly()},
 			{Keys: bson.D{{Key: "stripe_price_id", Value: 1}}},
 		},
 		constants.GrantsCollection: {
@@ -354,6 +357,10 @@ func (s *MongoStore) AppendAudit(ctx context.Context, e models.AuditEntry) error
 
 func (s *MongoStore) ListAudit(ctx context.Context, limit, skip int64) ([]models.AuditEntry, error) {
 	return find[models.AuditEntry](ctx, s.db.Collection(constants.AuditCollection), bson.D{}, page("at", -1, limit, skip))
+}
+
+func (s *MongoStore) ListPaidReductions(ctx context.Context, limit, skip int64) ([]models.AuditEntry, error) {
+	return find[models.AuditEntry](ctx, s.db.Collection(constants.AuditCollection), bson.D{{Key: "paid_reduction", Value: true}}, page("at", -1, limit, skip))
 }
 
 func (s *MongoStore) Ping(ctx context.Context) error { return s.db.Client().Ping(ctx, nil) }

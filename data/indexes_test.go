@@ -223,3 +223,34 @@ func TestEnsureIndexMatchesPlainAndNonUniqueIndexes(t *testing.T) {
 		t.Error("a compound index with the keys in another order is not equivalent")
 	}
 }
+
+// The driver writes a generated index name into the *IndexOptions it is given. Models that share
+// one options value therefore share the first model's name: the tiers and products slug indexes
+// were created as "key_1", the name generated for the keys index, and replicas that processed the
+// collections in another order disagreed about the names and conflicted.
+func TestNoTwoIndexModelsShareAnOptionsValue(t *testing.T) {
+	seen := map[*options.IndexOptions]string{}
+	for coll, models := range indexSpecs() {
+		for _, m := range models {
+			if m.Options == nil {
+				continue
+			}
+			where := fmt.Sprintf("%s %v", coll, m.Keys)
+			if other, dup := seen[m.Options]; dup {
+				t.Errorf("%s shares its options value with %s", where, other)
+			}
+			seen[m.Options] = where
+		}
+	}
+}
+
+func TestIndexSpecsAreBuiltFreshOnEveryCall(t *testing.T) {
+	first, second := indexSpecs(), indexSpecs()
+	for coll, ms := range first {
+		for i, m := range ms {
+			if m.Options != nil && m.Options == second[coll][i].Options {
+				t.Errorf("%s %v: the options value is reused between calls, so a name set by the driver sticks", coll, m.Keys)
+			}
+		}
+	}
+}

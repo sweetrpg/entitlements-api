@@ -101,6 +101,8 @@ type Grant struct {
 	// Mode is ModeAdd or ModeAtLeast for a key-level limit grant; empty means add.
 	Mode     string `bson:"mode,omitempty"`
 	Quantity int64  `bson:"quantity,omitempty"`
+	// Reason is the administrator's free-text justification; set on override grants only.
+	Reason string `bson:"reason,omitempty"`
 	// Refs are other Stripe object IDs (invoice, payment intent, charge) a refund or dispute
 	// event can name instead of ExternalID.
 	Refs            []string   `bson:"refs,omitempty"`
@@ -120,6 +122,9 @@ func (g Grant) ActiveAt(now time.Time) bool {
 const (
 	ModeAdd     = "add"
 	ModeAtLeast = "at_least"
+	// ModeOverride marks an administrator override: while active it replaces the computed value
+	// of its key (still clamped to the key maximum). At most one per user and key.
+	ModeOverride = "override"
 )
 
 // Billing kinds for a product.
@@ -175,8 +180,15 @@ type AuditEntry struct {
 	Action  string             `bson:"action" json:"action"`
 	Kind    string             `bson:"kind" json:"kind"`
 	Subject string             `bson:"subject" json:"subject"`
-	Before  any                `bson:"before,omitempty" json:"before,omitempty"`
-	After   any                `bson:"after,omitempty" json:"after,omitempty"`
+	// Reason is the administrator's justification for an override write.
+	Reason string `bson:"reason,omitempty" json:"reason,omitempty"`
+	// PaidReduction marks an override that lowered a user's value below what they paid for;
+	// Paid is that paid value and Reference the administrator's stated cause for it.
+	PaidReduction bool   `bson:"paid_reduction,omitempty" json:"paid_reduction,omitempty"`
+	Paid          any    `bson:"paid,omitempty" json:"paid,omitempty"`
+	Reference     string `bson:"reference,omitempty" json:"reference,omitempty"`
+	Before        any    `bson:"before,omitempty" json:"before,omitempty"`
+	After         any    `bson:"after,omitempty" json:"after,omitempty"`
 }
 
 // ValidateKeyName checks the namespaced key format, e.g. initiative.theme_slots.

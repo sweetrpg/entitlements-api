@@ -22,16 +22,27 @@ var (
 	ErrDuplicate = data.ErrDuplicate
 	// ErrInUse means the change would orphan something that still depends on the target.
 	ErrInUse = errors.New("in use")
+	// ErrPaidReductionsDisabled means an override would lower a paid value and the deployment
+	// does not allow that (ADMIN_PAID_REDUCTIONS_ENABLED is off).
+	ErrPaidReductionsDisabled = errors.New("reducing a paid value is not enabled")
 )
 
 // Service owns catalog writes and checks.
 type Service struct {
-	store data.Store
-	now   func() time.Time
+	store          data.Store
+	now            func() time.Time
+	paidReductions bool
 }
 
 // New returns a Service over store.
 func New(store data.Store) *Service { return &Service{store: store, now: time.Now} }
+
+// EnablePaidReductions sets whether an acknowledged override may lower a user's value below what
+// they paid for. Off by default; every other override works either way.
+func (s *Service) EnablePaidReductions(on bool) *Service {
+	s.paidReductions = on
+	return s
+}
 
 // KeyInput is the writable part of a key.
 type KeyInput struct {
@@ -64,8 +75,13 @@ func validateTTL(ttl int) error {
 // ERROR and the write still reports success. Upgrade path: wrap both in a Mongo transaction if
 // lost entries ever matter.
 func (s *Service) audit(ctx context.Context, actor, action, kind, subject string, before, after any) error {
+	return s.auditWithReason(ctx, actor, action, kind, subject, "", before, after)
+}
+
+// auditWithReason is audit with the administrator's reason recorded on the entry.
+func (s *Service) auditWithReason(ctx context.Context, actor, action, kind, subject, reason string, before, after any) error {
 	err := s.store.AppendAudit(ctx, models.AuditEntry{
-		At: s.now().UTC(), Actor: actor, Action: action, Kind: kind, Subject: subject, Before: before, After: after,
+		At: s.now().UTC(), Actor: actor, Action: action, Kind: kind, Subject: subject, Reason: reason, Before: before, After: after,
 	})
 	if err != nil {
 		logging.Logger.Error("catalog audit entry not recorded", "action", action, "kind", kind, "subject", subject, "actor", actor, "error", err.Error())

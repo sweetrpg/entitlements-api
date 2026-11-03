@@ -108,7 +108,7 @@ func main() {
 	r.Use(ratelimit.Middleware(redisPool, ratelimit.DefaultOptions()))
 
 	authzClient := authz.NewClient(cfg.AuthAPIURL, cfg.UsersAPIURL)
-	catalogSvc := catalog.New(store)
+	catalogSvc := catalog.New(store).EnablePaidReductions(cfg.AdminPaidReductionsEnabled)
 	bill := billing.New(store, billing.NewStripeGateway(cfg.StripeSecretKey), catalogSvc, billing.URLs{
 		CheckoutSuccess: cfg.CheckoutSuccessURL, CheckoutCancel: cfg.CheckoutCancelURL, PortalReturn: cfg.PortalReturnURL,
 	})

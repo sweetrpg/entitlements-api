@@ -29,7 +29,12 @@ func writeError(c *gin.Context, err error) {
 	var paymentFailed *billing.PaymentFailedError
 	var confirm *billing.ConfirmationRequiredError
 	var noIncrease catalog.NoIncreaseError
+	var paidReduction *catalog.PaidReductionError
 	switch {
+	case errors.As(err, &paidReduction):
+		c.JSON(http.StatusConflict, toPaidReductionVO(paidReduction))
+	case errors.Is(err, catalog.ErrPaidReductionsDisabled):
+		c.JSON(http.StatusForbidden, apiv.ErrorVO{Error: "paid_reductions_disabled", Message: err.Error()})
 	case errors.As(err, &confirm):
 		c.JSON(http.StatusConflict, ConfirmationRequiredVO{
 			Error: "confirmation_required", Message: "confirm the plan change to go ahead", Quote: confirm.Quote,
