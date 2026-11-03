@@ -50,6 +50,8 @@ const (
 
 	// MaxBatchKeys caps how many keys one batch check may name or expand to.
 	MaxBatchKeys = 200
+	// MaxAuditPage caps how many audit entries one request returns.
+	MaxAuditPage = 200
 
 	// MaxPrefixLength caps a batch check's prefix; a key name is at most 128 characters.
 	MaxPrefixLength = 128

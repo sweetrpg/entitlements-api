@@ -75,6 +75,9 @@ type Store interface {
 	// ListAudit returns entries newest first.
 	ListAudit(ctx context.Context, limit, skip int64) ([]models.AuditEntry, error)
 
+	// ListAuditBySubjectPrefix returns the audit entries whose subject starts with prefix,
+	// newest first.
+	ListAuditBySubjectPrefix(ctx context.Context, prefix string, limit, skip int64) ([]models.AuditEntry, error)
 	// ListPaidReductions returns the audit entries flagged as paid reductions, newest first.
 	ListPaidReductions(ctx context.Context, limit, skip int64) ([]models.AuditEntry, error)
 

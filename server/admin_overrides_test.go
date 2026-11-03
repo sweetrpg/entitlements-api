@@ -133,3 +133,22 @@ func TestPaidReductionIsRefusedWhenTheSwitchIsOffButOtherOverridesWork(t *testin
 		t.Errorf("list = %s", rec.Body)
 	}
 }
+
+func TestUserAuditRoute(t *testing.T) {
+	r, _ := seedChecks(t)
+	mustCode(t, do(r, "GET", "/admin/users/target-user/audit", userTok, ""), http.StatusForbidden)
+	rec := do(r, "GET", "/admin/users/target-user/audit", adminTok, "")
+	mustCode(t, rec, http.StatusOK)
+	if strings.TrimSpace(rec.Body.String()) != "[]" {
+		t.Errorf("empty = %s", rec.Body)
+	}
+	mustCode(t, do(r, "PUT", ovPath, adminTok, `{"value":9,"reason":"first"}`), http.StatusOK)
+	mustCode(t, do(r, "PUT", "/admin/users/other-user/overrides/initiative.theme_slots", adminTok, `{"value":9,"reason":"x"}`), http.StatusOK)
+	rec = do(r, "GET", "/admin/users/target-user/audit?limit=5", adminTok, "")
+	var got []models.AuditEntry
+	_ = json.Unmarshal(rec.Body.Bytes(), &got)
+	if len(got) != 1 || got[0].Subject != "target-user/initiative.theme_slots" || got[0].Reason != "first" || got[0].Actor != "canonical-"+adminTok {
+		t.Errorf("entries = %+v", got)
+	}
+	mustCode(t, do(r, "GET", "/admin/users/bad%20id/audit", adminTok, ""), http.StatusBadRequest)
+}

@@ -386,6 +386,18 @@ func (m *MemoryStore) ListAudit(_ context.Context, limit, skip int64) ([]models.
 	return window(out, limit, skip), nil
 }
 
+func (m *MemoryStore) ListAuditBySubjectPrefix(_ context.Context, prefix string, limit, skip int64) ([]models.AuditEntry, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := []models.AuditEntry{}
+	for _, e := range slices.Backward(m.audit) {
+		if strings.HasPrefix(e.Subject, prefix) {
+			out = append(out, e)
+		}
+	}
+	return window(out, limit, skip), nil
+}
+
 func (m *MemoryStore) ListPaidReductions(_ context.Context, limit, skip int64) ([]models.AuditEntry, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
