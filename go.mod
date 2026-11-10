@@ -1,6 +1,6 @@
 module github.com/sweetrpg/entitlements-api
 
-go 1.26.5
+go 1.26.10
 
 require (
 	github.com/getsentry/sentry-go v0.50.0
