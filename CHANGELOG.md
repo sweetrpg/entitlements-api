@@ -1,3 +1,13 @@
+## [0.8.1] - 2026-11-19
+
+### 🐛 Bug Fixes
+
+- *(ingress)* Request sweetrpg-dev-tls in the entitlements namespace
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Merge master into develop after v0.8.0
+- Update Go to 1.26.10
 ## [0.8.0] - 2026-11-03
 
 ### 🚀 Features
