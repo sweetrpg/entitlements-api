@@ -15,7 +15,7 @@ COPY go.sum go.sum
 RUN go mod download && go mod verify
 
 ADD . .
-RUN CGO_ENABLED=0 GOOS=linux go build -v -o /bin/server cmd/entitlements-api/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -v -o /bin/server ./cmd/entitlements-api
 
 FROM alpine
 
